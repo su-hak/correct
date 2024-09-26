@@ -1,13 +1,14 @@
-// grammar.controller.ts
-import { Controller, Post, Body } from '@nestjs/common';
-import { OpenAiService } from './openai.service';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { GrammarService } from './grammar/grammar.service';
+import { AuthGuard } from './auth/auth.guard';
 
 @Controller('grammar')
 export class GrammarController {
-  constructor(private openAiService: OpenAiService) {}
+  constructor(private grammarService: GrammarService) {}
 
+  @UseGuards(AuthGuard)
   @Post('check')
-  async checkGrammar(@Body('text') text: string) {
-    return this.openAiService.checkGrammar(text);
+  async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ correctSentence: string }> {
+    return this.grammarService.checkGrammar(sentences);
   }
 }

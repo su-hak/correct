@@ -4,13 +4,14 @@ import axios from 'axios';
 
 @Injectable()
 export class GrammarService {
-    private readonly logger = new Logger(GrammarService.name);
+  private readonly logger = new Logger(GrammarService.name);
+  
   constructor(private configService: ConfigService) {}
 
-  async checkGrammar(sentences: string[]): Promise<string> {
+  async checkGrammar(sentences: string[]): Promise<{ correctSentence: string }> {
     this.logger.log(`Checking grammar for sentences: ${sentences}`);
     const openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
-    
+
     const prompt = `다음 5개의 문장 중에서 문법적으로 정확한 문장을 찾아주세요:
     1. ${sentences[0]}
     2. ${sentences[1]}
@@ -35,9 +36,8 @@ export class GrammarService {
       const correctSentence = answer.replace('정확한 문장: ', '').split('. ')[1];
 
       this.logger.log(`Correct sentence found: ${correctSentence}`);
-      return correctSentence;
+      return { correctSentence };
     } catch (error) {
-      console.error('Error:', error);
       this.logger.error('Error during grammar check:', error.stack);
       throw new Error('문법 검사 중 오류가 발생했습니다.');
     }

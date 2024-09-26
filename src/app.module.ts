@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import * as path from 'path';
-import { OpenAiService } from './openai.service';
 import { GrammarModule } from './grammar/grammar.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard } from './auth/auth.guard';
@@ -52,7 +51,7 @@ import { APP_GUARD } from '@nestjs/core';
     AuthModule
   ],
   providers: [
-    OpenAiService, {
+    {
     provide: APP_GUARD,
     useClass: AuthGuard,
   }
