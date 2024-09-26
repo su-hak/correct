@@ -30,7 +30,8 @@ export class AuthGuard implements CanActivate {
       const user = await this.authService.validateUser(userId, token);
       request['user'] = user;
       return true;
-    } catch {
+    } catch (error) {
+      console.error('Authentication error:', error);
       throw new UnauthorizedException();
     }
   }

@@ -29,6 +29,7 @@ import { APP_GUARD } from '@nestjs/core';
             database: matches[5],
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: false, // Heroku 환경에서는 synchronize를 false로 설정
+            logging: true, // 쿼리 로깅 활성화
           };
         } else {
           return {
@@ -40,6 +41,7 @@ import { APP_GUARD } from '@nestjs/core';
             database: configService.get('DB_NAME'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: configService.get('DB_SYNC') === 'true',
+            logging: true, // 쿼리 로깅 활성화
           };
         }
       },

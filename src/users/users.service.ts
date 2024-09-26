@@ -23,13 +23,22 @@ export class UsersService {
 
   async login(loginUserDto: LoginUserDto): Promise<User> {
     const { id } = loginUserDto;
+    console.log(`Attempting to login with id: ${id}`);
+    
     const user = await this.usersRepository.findOne({ where: { id } });
+    console.log(`User found:`, user);
+    
     if (!user) {
+      console.log(`User not found for id: ${id}`);
       throw new NotFoundException('User not found');
     }
+    
     if (new Date() > user.expiryDate) {
+      console.log(`Token expired for user: ${id}`);
       throw new UnauthorizedException('Token has expired');
     }
+    
+    console.log(`Login successful for user: ${id}`);
     return user;
   }
 
