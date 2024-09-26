@@ -6,6 +6,8 @@ import * as path from 'path';
 import { OpenAiService } from './openai.service';
 import { GrammarModule } from './grammar/grammar.module';
 import { AuthModule } from './auth/auth.module';
+import { AuthGuard } from './auth/auth.guard';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -47,6 +49,11 @@ import { AuthModule } from './auth/auth.module';
     GrammarModule,
     AuthModule
   ],
-  providers: [OpenAiService],
+  providers: [
+    OpenAiService, {
+    provide: APP_GUARD,
+    useClass: AuthGuard,
+  }
+],
 })
 export class AppModule {}
