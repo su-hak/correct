@@ -1,23 +1,12 @@
+// src/auth/auth.guard.ts
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { AuthService } from './auth.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(
-    private authService: AuthService,
-    private reflector: Reflector
-  ) {}
+  constructor(private authService: AuthService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest();
     const token = this.extractTokenFromHeader(request);
     const userId = this.extractUserIdFromHeader(request);
@@ -30,8 +19,7 @@ export class AuthGuard implements CanActivate {
       const user = await this.authService.validateUser(userId, token);
       request['user'] = user;
       return true;
-    } catch (error) {
-      console.error('Authentication error:', error);
+    } catch {
       throw new UnauthorizedException();
     }
   }
