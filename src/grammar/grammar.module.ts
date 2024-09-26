@@ -1,13 +1,10 @@
+// src/grammar/grammar.module.ts
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { UsersModule } from '../users/users.module';
-
-
+import { GrammarController } from './grammar.controller';
+import { GrammarService } from './grammar.service';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    UsersModule,
-  ],
+  controllers: [GrammarController],
+  providers: [GrammarService],
 })
-export class AppModule {}
+export class GrammarModule {}

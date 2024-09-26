@@ -5,6 +5,7 @@ import { UsersModule } from './users/users.module';
 import * as path from 'path';
 import { OpenAiService } from './openai.service';
 import { GrammarModule } from './grammar/grammar.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { GrammarModule } from './grammar/grammar.module';
     }),
     UsersModule,
     GrammarModule,
+    AuthModule
   ],
   providers: [OpenAiService],
 })
