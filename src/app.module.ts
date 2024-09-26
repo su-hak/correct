@@ -9,20 +9,36 @@ import { OpenAiService } from './openai.service';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: path.resolve(__dirname, '..', '.env'),
+      envFilePath: process.env.NODE_ENV === 'production' ? undefined : path.resolve(__dirname, '..', '.env'),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mariadb', // 직접 'mariadb'로 지정
-        host: configService.get('DB_HOST'),
-        port: +configService.get('DB_PORT'),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get('DB_SYNC') === 'true',
-      }),
+      useFactory: (configService: ConfigService) => {
+        if (process.env.JAWSDB_MARIA_URL) {
+          const matches = process.env.JAWSDB_MARIA_URL.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+          return {
+            type: 'mariadb',
+            host: matches[3],
+            port: parseInt(matches[4]),
+            username: matches[1],
+            password: matches[2],
+            database: matches[5],
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            synchronize: false, // Heroku 환경에서는 synchronize를 false로 설정
+          };
+        } else {
+          return {
+            type: 'mariadb',
+            host: configService.get('DB_HOST'),
+            port: +configService.get('DB_PORT'),
+            username: configService.get('DB_USERNAME'),
+            password: configService.get('DB_PASSWORD'),
+            database: configService.get('DB_NAME'),
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            synchronize: configService.get('DB_SYNC') === 'true',
+          };
+        }
+      },
       inject: [ConfigService],
     }),
     UsersModule,
