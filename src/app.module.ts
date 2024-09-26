@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import * as path from 'path';
 import { OpenAiService } from './openai.service';
+import { GrammarModule } from './grammar/grammar.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { OpenAiService } from './openai.service';
       inject: [ConfigService],
     }),
     UsersModule,
+    GrammarModule,
   ],
   providers: [OpenAiService],
 })
