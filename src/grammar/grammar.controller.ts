@@ -11,4 +11,11 @@ export class GrammarController {
   async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ correctSentence: string }> {
     return this.grammarService.checkGrammar(sentences);
   }
+
+
+  @UseGuards(AuthGuard)
+  @Post('extract-and-check')
+  async extractAndCheckGrammar(@Body('imageDescription') imageDescription: string): Promise<{ correctSentence: string, correctIndex: number }> {
+    return this.grammarService.extractAndCheckGrammar(imageDescription);
+  }
 }
