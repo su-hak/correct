@@ -5,12 +5,16 @@ import { UsersModule } from './users/users.module';
 import * as path from 'path';
 import { GrammarModule } from './grammar/grammar.module';
 import { AuthModule } from './auth/auth.module';
+import { generateSecret } from './utils/secret-generator';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: process.env.NODE_ENV === 'production' ? undefined : path.resolve(__dirname, '..', '.env'),
+      load: [() => ({
+        JWT_SECRET: process.env.JWT_SECRET || generateSecret(),
+      })],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
