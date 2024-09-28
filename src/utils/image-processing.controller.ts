@@ -23,7 +23,10 @@ export class ImageProcessingController {
             }
 
             const sentences = await this.visionService.detectTextInImage(file.buffer);
+            this.logger.log(`Detected sentences: ${sentences.join(', ')}`);
+
             const { correctSentence, correctIndex } = await this.grammarService.checkGrammar(sentences);
+            this.logger.log(`Grammar check result: ${correctSentence} at index ${correctIndex}`);
 
             return {
                 sentences,
@@ -32,6 +35,9 @@ export class ImageProcessingController {
             };
         } catch (error) {
             this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+            if (error instanceof HttpException) {
+                throw error;
+            }
             throw new HttpException(`Failed to analyze image: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

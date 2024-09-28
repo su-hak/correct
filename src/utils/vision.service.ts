@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ImageAnnotatorClient, protos } from '@google-cloud/vision';
+import { setTimeout } from 'timers/promises';
 
 type Vertex = protos.google.cloud.vision.v1.IVertex;
 
@@ -16,8 +17,18 @@ export class VisionService {
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
     try {
-      this.logger.log('Starting text detection...');
-      const [detectionResult] = await this.client.textDetection(imageBuffer);
+      this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
+      
+      const detectionPromise = this.client.textDetection(imageBuffer);
+      const timeoutPromise = setTimeout(60000, null);
+      
+      const result = await Promise.race([detectionPromise, timeoutPromise]);
+
+      if (!result) {
+        throw new Error('Vision API request timed out');
+      }
+
+      const [detectionResult] = result as [protos.google.cloud.vision.v1.IAnnotateImageResponse];
       this.logger.log('Text detection completed');
 
       const detections = detectionResult.textAnnotations || [];
@@ -43,6 +54,9 @@ export class VisionService {
       return extractedSentences;
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+      if (error.response) {
+        this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
+      }
       throw new Error(`Failed to analyze image: ${error.message}`);
     }
   }

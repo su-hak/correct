@@ -25,11 +25,13 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  app.enableCors();
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   const port = process.env.PORT || configService.get('PORT') || 3000;
-  await app.listen(port);
+  const server = await app.listen(port);
+  server.setTimeout(300000);
+
+  console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
