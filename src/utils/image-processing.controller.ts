@@ -37,8 +37,11 @@ export class ImageProcessingController {
             this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
             if (error instanceof HttpException) {
                 throw error;
+            } else if (error instanceof Error) {
+                throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+            } else {
+                throw new HttpException('An unknown error occurred', HttpStatus.INTERNAL_SERVER_ERROR);
             }
-            throw new HttpException(`Failed to analyze image: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

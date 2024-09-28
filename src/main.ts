@@ -33,5 +33,7 @@ async function bootstrap() {
   server.setTimeout(300000);
 
   console.log(`Application is running on: ${await app.getUrl()}`);
+  console.log(`Node environment: ${process.env.NODE_ENV}`);
+  console.log(`Memory usage: ${JSON.stringify(process.memoryUsage())}`);
 }
 bootstrap();
