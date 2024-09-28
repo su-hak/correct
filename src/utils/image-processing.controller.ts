@@ -1,8 +1,11 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
-import { v4 as uuidv4 } from 'uuid'; // 'uuid' 패키지 설치 필요
+import { v4 as uuidv4 } from 'uuid';
+import * as Queue from 'bull';
+
+const imageProcessingQueue = new Queue('image-processing', process.env.REDIS_URL);
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -12,17 +15,24 @@ export class ImageProcessingController {
     constructor(
         private visionService: VisionService,
         private grammarService: GrammarService,
-    ) { }
+    ) { 
+      imageProcessingQueue.process(async (job) => {
+        await this.processImageInBackground(job.data.jobId, job.data.buffer);
+      });
+    }
 
     @Post('analyze')
     @UseInterceptors(FileInterceptor('image'))
     async analyzeImage(@UploadedFile() file: Express.Multer.File) {
-      const jobId = uuidv4();
-      
-      // 백그라운드에서 이미지 처리 시작
-      this.processImageInBackground(jobId, file.buffer);
-    
-      return { jobId, message: 'Image analysis started' };
+      try {
+        const jobId = uuidv4();
+        await imageProcessingQueue.add({ jobId, buffer: file.buffer });
+        return { jobId, message: 'Image analysis started' };
+      } catch (error) {
+        this.logger.error(`Failed to queue image analysis: ${error.message}`, error.stack);
+        console.error('Detailed error:', JSON.stringify(error, null, 2));
+        throw new InternalServerErrorException('Failed to start image analysis');
+      }
     }
 
     private async processImageInBackground(jobId: string, imageBuffer: Buffer) {
@@ -30,10 +40,10 @@ export class ImageProcessingController {
           const sentences = await this.visionService.detectTextInImage(imageBuffer);
           const { correctSentence, correctIndex } = await this.grammarService.checkGrammar(sentences);
       
-          // 결과를 맵에 저장
           await this.storeResult(jobId, { sentences, correctSentence, correctIndex });
         } catch (error) {
           this.logger.error(`Failed to process image: ${error.message}`, error.stack);
+          console.error('Detailed error:', JSON.stringify(error, null, 2));
           await this.storeResult(jobId, { error: error.message });
         }
     }
