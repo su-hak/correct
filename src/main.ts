@@ -8,6 +8,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
+  app.use((req, res, next) => {
+    req.setTimeout(300000, () => {
+      res.status(408).send('Request Timeout');
+    });
+    next();
+  });
+
   app.enableCors({
     origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -31,6 +38,10 @@ async function bootstrap() {
   const port = process.env.PORT || configService.get('PORT') || 3000;
   const server = await app.listen(port);
   server.setTimeout(300000);
+
+  setInterval(() => {
+    console.log('Memory usage:', process.memoryUsage());
+  }, 60000);
 
   console.log(`Application is running on: ${await app.getUrl()}`);
   console.log(`Node environment: ${process.env.NODE_ENV}`);
