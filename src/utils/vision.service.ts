@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ImageAnnotatorClient, protos } from '@google-cloud/vision';
-import axios from 'axios';
-import axiosRetry from 'axios-retry';
 
 type Vertex = protos.google.cloud.vision.v1.IVertex;
 
@@ -10,41 +8,18 @@ type Vertex = protos.google.cloud.vision.v1.IVertex;
 export class VisionService {
   private client: ImageAnnotatorClient;
   private readonly logger = new Logger(VisionService.name);
-  private axiosInstance: any;
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
-    this.client = new ImageAnnotatorClient({ apiKey });
-
-    this.axiosInstance = axios.create({ timeout: 30000 });
-    axiosRetry(this.axiosInstance, { retries: 3 });
+    const credentials = JSON.parse(this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON'));
+    this.client = new ImageAnnotatorClient({ credentials });
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
     try {
       this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
 
-      const [result] = await this.axiosInstance.post(
-        'https://vision.googleapis.com/v1/images:annotate',
-        {
-          requests: [
-            {
-              image: {
-                content: imageBuffer.toString('base64'),
-              },
-              features: [{ type: 'TEXT_DETECTION' }],
-            },
-          ],
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.configService.get<string>('GOOGLE_CLOUD_API_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      const detections = result.data.responses[0].textAnnotations || [];
+      const [result] = await this.client.textDetection(imageBuffer);
+      const detections = result.textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);
       
       if (detections.length === 0) {
