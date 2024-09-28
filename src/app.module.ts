@@ -7,6 +7,7 @@ import { GrammarModule } from './grammar/grammar.module';
 import { AuthModule } from './auth/auth.module';
 import { generateSecret } from './utils/secret-generator';
 import { BullModule } from '@nestjs/bull';
+import { ImageProcessingModule } from './image-processing/image-processing.module';
 
 @Module({
   imports: [
@@ -73,7 +74,8 @@ import { BullModule } from '@nestjs/bull';
     }),
     UsersModule,
     GrammarModule,
-    AuthModule
+    AuthModule,
+    ImageProcessingModule
   ],
 })
 export class AppModule {}
