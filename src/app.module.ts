@@ -6,6 +6,7 @@ import * as path from 'path';
 import { GrammarModule } from './grammar/grammar.module';
 import { AuthModule } from './auth/auth.module';
 import { generateSecret } from './utils/secret-generator';
+import { BullModule } from '@nestjs/bull';
 
 @Module({
   imports: [
@@ -47,6 +48,28 @@ import { generateSecret } from './utils/secret-generator';
         }
       },
       inject: [ConfigService],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const redisUrl = configService.get('REDIS_URL');
+        if (redisUrl) {
+          return {
+            redis: redisUrl,
+          };
+        } else {
+          return {
+            redis: {
+              host: configService.get('REDIS_HOST'),
+              port: configService.get('REDIS_PORT'),
+            },
+          };
+        }
+      },
+      inject: [ConfigService],
+    }),
+    BullModule.registerQueue({
+      name: 'image-processing',
     }),
     UsersModule,
     GrammarModule,

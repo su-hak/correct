@@ -36,8 +36,8 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   app.use((req, res, next) => {
-    req.setTimeout(300000); // 5분
-    res.setTimeout(300000); // 5분
+    req.setTimeout(120000); // 2분으로 조정
+    res.setTimeout(120000); // 2분으로 조정
     next();
   });
 

@@ -18,8 +18,12 @@ export class VisionService {
     try {
       this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
 
-      const [result] = await this.client.textDetection(imageBuffer);
-      const detections = result.textAnnotations || [];
+      const result = await Promise.race([ 
+        this.client.textDetection(imageBuffer),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Vision API timeout')), 20000))
+      ]) as [protos.google.cloud.vision.v1.IAnnotateImageResponse];
+
+      const detections = result[0].textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);
       
       if (detections.length === 0) {
