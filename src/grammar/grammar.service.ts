@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 @Injectable()
 export class GrammarService {
+  private readonly logger = new Logger(GrammarService.name);
+
   constructor(private configService: ConfigService) {}
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
@@ -37,5 +39,47 @@ export class GrammarService {
       };
     }
     throw new Error('올바른 문장을 찾을 수 없습니다.');
+  }
+
+  async extractAndCheckGrammar(imageDescription: string): Promise<{ correctSentence: string, correctIndex: number }> {
+    this.logger.log(`Extracting sentences and checking grammar for image description`);
+    const openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
+
+    try {
+      // 1. 이미지 설명에서 문장 추출
+      const extractionPrompt = `다음 이미지 설명에서 정확히 5개의 문장을 추출해주세요:
+      ${imageDescription}
+      
+      각 문장을 번호를 붙여 나열해주세요.`;
+
+      const extractionResponse = await this.callOpenAI(openaiApiKey, extractionPrompt);
+      const extractedSentences = this.parseSentences(extractionResponse);
+
+      // 2. 추출된 문장들 중 문법적으로 정확한 문장 찾기
+      return this.checkGrammar(extractedSentences);
+    } catch (error) {
+      this.logger.error('Error during sentence extraction and grammar check:', error.stack);
+      throw new Error('문장 추출 및 문법 검사 중 오류가 발생했습니다.');
+    }
+  }
+
+  private async callOpenAI(apiKey: string, prompt: string): Promise<string> {
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+    }, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    return response.data.choices[0].message.content.trim();
+  }
+
+  private parseSentences(response: string): string[] {
+    return response.split('\n')
+      .filter(line => line.trim().match(/^\d+\./))
+      .map(line => line.replace(/^\d+\.\s*/, '').trim());
   }
 }
