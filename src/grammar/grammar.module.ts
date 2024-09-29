@@ -7,5 +7,6 @@ import { AuthModule } from 'src/auth/auth.module';
   imports: [AuthModule],
   controllers: [GrammarController],
   providers: [GrammarService],
+  exports: [GrammarService]
 })
 export class GrammarModule {}

@@ -12,9 +12,9 @@ import { InjectQueue } from '@nestjs/bull'
       private results: Map<string, any> = new Map();
   
       constructor(
-          private visionService: VisionService,
-          private grammarService: GrammarService,
-          @InjectQueue('image-processing') private imageProcessingQueue: Queue
+          private readonly visionService: VisionService,
+          private readonly grammarService: GrammarService,
+          @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
       ) {
           this.imageProcessingQueue.process(async (job) => {
               await this.processImageInBackground(job.data.jobId, job.data.buffer);
