@@ -1,77 +1,51 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ImageAnnotatorClient, protos } from '@google-cloud/vision';
+import axios from 'axios';
 import * as sharp from 'sharp';
-import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs';
-
-type Vertex = protos.google.cloud.vision.v1.IVertex;
 
 @Injectable()
 export class VisionService {
-  private client: ImageAnnotatorClient;
   private readonly logger = new Logger(VisionService.name);
+  private readonly apiKey: string;
 
   constructor(private configService: ConfigService) {
-    // Base64로 인코딩된 환경 변수에서 값을 가져옴
-    const encodedCredentials = this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64');
-  
-    // Base64 디코딩하여 JSON 문자열로 변환
-    const decodedCredentials = Buffer.from(encodedCredentials, 'base64').toString('utf-8');
-    
-    // 디코딩된 JSON 내용을 로그로 출력 (확인용)
-    console.log('Decoded Credentials:', decodedCredentials);
-  
-    // JSON 파싱
-    const credentials = JSON.parse(decodedCredentials);
-    
-    // Google Cloud Vision Client 생성
-    this.client = new ImageAnnotatorClient({
-      credentials,
-      timeout: 30000, // 30초 타임아웃
-      retry: {
-        retries: 3,
-        factor: 2,
-        minTimeout: 1000,
-        maxTimeout: 10000
-      }
-    });
-  
-    // 클라이언트 초기화 로그
-    this.logger.log('Vision client initialized with custom options');
-  }
-  
-
-  async detectTextInImage(imageBuffer: Buffer): Promise<{sentences: string[], boundingBoxes: any[]}> {
-    this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
-    this.logger.log(`First few bytes: ${imageBuffer.slice(0, 10).toString('hex')}`);
-
-    if (!imageBuffer || imageBuffer.length === 0) {
-      throw new Error('Invalid image buffer');
+    // Google Cloud API 키를 환경 변수에서 가져옵니다.
+    this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
+    if (!this.apiKey) {
+      throw new Error('GOOGLE_CLOUD_API_KEY is not set in the environment variables');
     }
+  }
+
+  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[] }> {
+    this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
 
     try {
       const metadata = await sharp(imageBuffer).metadata();
       this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
 
-      // 이미지 크기 조정 및 PNG로 변환
+      // 이미지를 JPEG로 변환하고 크기를 조정합니다.
       const resizedBuffer = await sharp(imageBuffer)
-        .resize({ width: 1000, height: 1000, fit: 'inside' })
-        .png()
+        .resize({ width: 800, height: 800, fit: 'inside' })
+        .jpeg({ quality: 90 })
         .toBuffer();
-
-      const convertedMetadata = await sharp(resizedBuffer).metadata();
-      this.logger.log(`Converted PNG metadata: ${JSON.stringify(convertedMetadata)}`);
 
       // Base64로 인코딩
       const base64Image = resizedBuffer.toString('base64');
 
-      const [result] = await this.client.textDetection({
-        image: { content: base64Image }
-      });
+      // Google Cloud Vision API에 직접 HTTP 요청
+      const response = await axios.post(
+        `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
+        {
+          requests: [
+            {
+              image: { content: base64Image },
+              features: [{ type: 'TEXT_DETECTION' }]
+            }
+          ]
+        }
+      );
 
-      const detections = result.textAnnotations || [];
+      const detections = response.data.responses[0].textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);
 
       if (detections.length === 0) {
@@ -94,13 +68,9 @@ export class VisionService {
       return { sentences: extractedSentences, boundingBoxes };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
-      if (error.details) {
-        this.logger.error(`Error details: ${error.details}`);
+      if (error.response) {
+        this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
       }
-      if (error.metadata) {
-        this.logger.error(`Error metadata: ${JSON.stringify(error.metadata)}`);
-      }
-      console.error('Detailed error:', JSON.stringify(error, null, 2));
       throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
     }
   }
@@ -110,7 +80,7 @@ export class VisionService {
       try {
         return await this.detectTextInImage(imageBuffer);
       } catch (error) {
-        if (attempt === maxRetries) throw error;
+        if (error.code !== 2 || attempt === maxRetries) throw error;
         this.logger.warn(`Attempt ${attempt} failed, retrying...`);
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       }
