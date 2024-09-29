@@ -30,10 +30,10 @@ export class ImageProcessingProcessor {
             const imageBuffer = Buffer.from(base64Image, 'base64');
 
             // 이미지 처리 로직...
-            const sentences = await this.visionService.detectTextInImage(imageBuffer);
+            const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
 
-            if (sentences.length !== 5) {
-                throw new Error('Expected 5 sentences, but got ' + sentences.length);
+            if (sentences.length === 0) {
+                throw new Error('No sentences detected in the image');
             }
 
             // 문법 검사 및 올바른 문장 찾기
@@ -42,6 +42,7 @@ export class ImageProcessingProcessor {
             // 결과 저장
             const result = {
                 sentences,
+                boundingBoxes,
                 correctSentence,
                 correctIndex
             };

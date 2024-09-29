@@ -17,7 +17,8 @@ export class GrammarService {
         return { correctSentence: sentences[i], correctIndex: i };
       }
     }
-    throw new Error('No correct sentence found');
+    // 모든 문장이 부적절할 경우 첫 번째 문장 반환
+    return { correctSentence: sentences[0], correctIndex: 0 };
   }
 
   private async isCorrectGrammar(sentence: string): Promise<boolean> {

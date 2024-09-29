@@ -43,7 +43,12 @@ export class ImageProcessingController {
             throw new InternalServerErrorException('Failed to process image in time');
         }
 
-        return result;
+        return {
+            sentences: result.sentences,
+            boundingBoxes: result.boundingBoxes,
+            correctSentence: result.correctSentence,
+            correctIndex: result.correctIndex
+          };
     }
 
     @Get('result/:jobId')
