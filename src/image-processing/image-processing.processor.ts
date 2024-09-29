@@ -20,10 +20,10 @@ export class ImageProcessingProcessor {
     this.logger.log(`Processing image job ${job.id}`);
     const { jobId, imageBuffer } = job.data;
     this.logger.log(`Processing job ${jobId}, image buffer size: ${imageBuffer?.length || 0} bytes`);
-
-    if (!imageBuffer || !(imageBuffer instanceof Buffer)) {
-        throw new Error('Invalid image data');
-      }
+  
+    if (!imageBuffer || !(imageBuffer instanceof Buffer) || imageBuffer.length === 0) {
+      throw new Error('Invalid image data');
+    }
 
     try {
       // 이미지에서 텍스트 추출
