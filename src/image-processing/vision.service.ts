@@ -10,8 +10,19 @@ export class VisionService {
   private readonly logger = new Logger(VisionService.name);
 
   constructor(private configService: ConfigService) {
-    const credentials = JSON.parse(this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON'));
-    this.client = new ImageAnnotatorClient({ credentials });
+    try {
+      const credentialsBase64 = this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64');
+      if (!credentialsBase64) {
+        throw new Error('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64 is not set');
+      }
+      const credentialsString = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
+      const credentials = JSON.parse(credentialsString);
+      this.client = new ImageAnnotatorClient({ credentials });
+      this.logger.log('Google Vision client initialized successfully');
+    } catch (error) {
+      this.logger.error(`Failed to initialize Google Vision client: ${error.message}`, error.stack);
+      throw new Error('Failed to initialize VisionService');
+    }
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
