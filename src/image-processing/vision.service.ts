@@ -10,29 +10,22 @@ export class VisionService {
   private readonly logger = new Logger(VisionService.name);
 
   constructor(private configService: ConfigService) {
-    try {
-      const credentialsBase64 = this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64');
-      if (!credentialsBase64) {
-        throw new Error('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64 is not set');
-      }
-      const credentialsString = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
-      const credentials = JSON.parse(credentialsString);
-      this.client = new ImageAnnotatorClient({ credentials });
-      this.logger.log('Google Vision client initialized successfully');
-    } catch (error) {
-      this.logger.error(`Failed to initialize Google Vision client: ${error.message}`, error.stack);
-      throw new Error('Failed to initialize VisionService');
-    }
+    const credentials = JSON.parse(
+      Buffer.from(this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64'), 'base64').toString('utf-8')
+    );
+    this.client = new ImageAnnotatorClient({ credentials });
+    this.logger.log('Vision client initialized');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
+    this.logger.log(`Detecting text in image, buffer size: ${imageBuffer?.length || 0} bytes`);
+    if (!imageBuffer || imageBuffer.length === 0) {
+      throw new Error('Invalid image buffer');
+    }
     try {
       this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
 
-      const result = await Promise.race([ 
-        this.client.textDetection(imageBuffer),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Vision API timeout')), 20000))
-      ]) as [protos.google.cloud.vision.v1.IAnnotateImageResponse];
+      const result = await this.client.textDetection(imageBuffer);
 
       const detections = result[0].textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);

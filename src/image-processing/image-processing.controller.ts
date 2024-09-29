@@ -20,6 +20,14 @@ import { InjectQueue } from '@nestjs/bull'
       @Post('analyze')
       @UseInterceptors(FileInterceptor('image'))
       async analyzeImage(@UploadedFile() file: Express.Multer.File) {
+        this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer.length || 0} bytes`);
+        if (file) {
+            this.logger.log(`File details: 
+              - Original name: ${file.originalname}
+              - MIME type: ${file.mimetype}
+              - Size: ${file.size} bytes
+              - Buffer length: ${file.buffer.length} bytes`);
+          }
         const jobId = uuidv4();
         await this.imageProcessingQueue.add('processImage', { jobId, imageBuffer: file.buffer });
         return { jobId, message: 'Image processing started' };
