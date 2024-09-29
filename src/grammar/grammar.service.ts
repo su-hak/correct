@@ -1,3 +1,4 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -7,8 +8,32 @@ export class GrammarService {
   private readonly logger = new Logger(GrammarService.name);
   private readonly openaiApiKey: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(private configService: ConfigService, private readonly httpService: HttpService) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
+  }
+
+  async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+    let mostNaturalIndex = 0;
+    let highestScore = 0;
+
+    for (let i = 0; i < sentences.length; i++) {
+      const score = await this.evaluateSentence(sentences[i]);
+      if (score > highestScore) {
+        highestScore = score;
+        mostNaturalIndex = i;
+      }
+    }
+
+    return {
+      correctSentence: sentences[mostNaturalIndex],
+      correctIndex: mostNaturalIndex
+    };
+  }
+
+  async evaluateSentence(sentence: string): Promise<number> {
+    // 점수를 평가하는 함수로 수정
+    const isCorrect = await this.isCorrectGrammar(sentence);
+    return isCorrect ? 1 : 0; // 예시로 올바른 문장일 경우 1점을 반환
   }
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
