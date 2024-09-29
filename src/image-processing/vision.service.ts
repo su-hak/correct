@@ -1,6 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ImageAnnotatorClient, protos } from '@google-cloud/vision';
+import * as sharp from 'sharp';
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 
 type Vertex = protos.google.cloud.vision.v1.IVertex;
 
@@ -18,9 +22,11 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
+    const tempFilePath = path.join(os.tmpdir(), `image-${Date.now()}.jpg`);
     this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
     this.logger.log(`First few bytes: ${imageBuffer.slice(0, 10).toString('hex')}`);
     this.logger.log(`Detecting text in image, buffer size: ${imageBuffer?.length || 0} bytes`);
+
     if (!imageBuffer || imageBuffer.length === 0) {
       throw new Error('Invalid image buffer');
     }
@@ -29,9 +35,16 @@ export class VisionService {
       throw new Error('Unsupported image format');
     }
     try {
+      const metadata = await sharp(imageBuffer).metadata();
+      this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
+
+      await sharp(imageBuffer).jpeg().toFile(tempFilePath);
+      const jpegBuffer = await sharp(imageBuffer)
+        .jpeg()
+        .toBuffer();
       this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
 
-      const [result] = await this.client.textDetection(imageBuffer);
+      const [result] = await this.client.textDetection(jpegBuffer);
       const detections = result.textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);
 
@@ -48,8 +61,13 @@ export class VisionService {
       return extractedSentences;
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+      if (error.details) {
+        this.logger.error(`Error details: ${error.details}`);
+      }
       console.error('Detailed error:', JSON.stringify(error, null, 2));
-      throw new Error(`Failed to analyze image: ${error.message}`);
+      throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
+    } finally {
+      fs.unlinkSync(tempFilePath);
     }
   }
 
