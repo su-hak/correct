@@ -15,19 +15,7 @@ import { InjectQueue } from '@nestjs/bull'
           private readonly visionService: VisionService,
           private readonly grammarService: GrammarService,
           @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
-      ) {
-          this.imageProcessingQueue.process(async (job) => {
-              await this.processImageInBackground(job.data.jobId, job.data.buffer);
-          });
-  
-          this.imageProcessingQueue.on('completed', (job) => {
-              console.log(`Job ${job.id} completed`);
-          });
-  
-          this.imageProcessingQueue.on('failed', (job, error) => {
-              console.error(`Job ${job.id} failed:`, error);
-          });
-      }
+      ) {}
   
       @Post('analyze')
       @UseInterceptors(FileInterceptor('image'))
@@ -35,17 +23,6 @@ import { InjectQueue } from '@nestjs/bull'
         const jobId = uuidv4();
         await this.imageProcessingQueue.add('processImage', { jobId, imageBuffer: file.buffer });
         return { jobId, message: 'Image processing started' };
-      }
-  
-      private async processImageInBackground(jobId: string, imageBuffer: Buffer) {
-          try {
-              const sentences = await this.visionService.detectTextInImage(imageBuffer);
-              const { correctSentence, correctIndex } = await this.grammarService.checkGrammar(sentences);
-              await this.storeResult(jobId, { sentences, correctSentence, correctIndex });
-          } catch (error) {
-              this.logger.error(`Failed to process image: ${error.message}`, error.stack);
-              await this.storeResult(jobId, { error: error.message });
-          }
       }
   
       @Get('result/:jobId')
@@ -58,10 +35,10 @@ import { InjectQueue } from '@nestjs/bull'
       }
   
       private async storeResult(jobId: string, result: any): Promise<void> {
-          this.results.set(jobId, result);
-      }
-  
-      private async getStoredResult(jobId: string): Promise<any> {
-          return this.results.get(jobId);
-      }
+        this.results.set(jobId, result);
+    }
+
+    private async getStoredResult(jobId: string): Promise<any> {
+        return this.results.get(jobId);
+    }
   }

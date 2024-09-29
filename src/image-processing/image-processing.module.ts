@@ -4,6 +4,7 @@ import { VisionService } from './vision.service';
 import { BullModule } from '@nestjs/bull';
 import { GrammarService } from 'src/grammar/grammar.service';
 import { GrammarModule } from 'src/grammar/grammar.module';
+import { ImageProcessingProcessor } from './image-processing.processor';
 
 @Module({
   imports: [
@@ -13,6 +14,6 @@ import { GrammarModule } from 'src/grammar/grammar.module';
     GrammarModule
   ],
   controllers: [ImageProcessingController],
-  providers: [VisionService, GrammarService],
+  providers: [VisionService, GrammarService, ImageProcessingProcessor],
 })
 export class ImageProcessingModule {}
