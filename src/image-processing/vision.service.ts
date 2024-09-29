@@ -17,8 +17,17 @@ export class VisionService {
     const credentials = JSON.parse(
       Buffer.from(this.configService.get<string>('GOOGLE_APPLICATION_CREDENTIALS_JSON_BASE64'), 'base64').toString('utf-8')
     );
-    this.client = new ImageAnnotatorClient({ credentials });
-    this.logger.log('Vision client initialized');
+    this.client = new ImageAnnotatorClient({
+      credentials,
+      timeout: 30000, // 30초 타임아웃
+      retry: {
+        retries: 3,
+        factor: 2,
+        minTimeout: 1000,
+        maxTimeout: 10000
+      }
+    });
+    this.logger.log('Vision client initialized with custom options');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
@@ -38,13 +47,14 @@ export class VisionService {
       const metadata = await sharp(imageBuffer).metadata();
       this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
 
-      await sharp(imageBuffer).jpeg().toFile(tempFilePath);
-      const jpegBuffer = await sharp(imageBuffer)
-        .jpeg()
-        .toBuffer();
-      this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
+      const jpegBuffer = await sharp(imageBuffer).jpeg({ quality: 90 }).toBuffer();
+      const convertedMetadata = await sharp(jpegBuffer).metadata();
+      this.logger.log(`Converted JPEG metadata: ${JSON.stringify(convertedMetadata)}`);
 
-      const [result] = await this.client.textDetection(jpegBuffer);
+      // JPEG 파일로 저장
+      await fs.promises.writeFile(tempFilePath, jpegBuffer);
+
+      const [result] = await this.client.textDetection(tempFilePath);
       const detections = result.textAnnotations || [];
       this.logger.log(`Number of text annotations: ${detections.length}`);
 
@@ -64,10 +74,13 @@ export class VisionService {
       if (error.details) {
         this.logger.error(`Error details: ${error.details}`);
       }
+      if (error.metadata) {
+        this.logger.error(`Error metadata: ${JSON.stringify(error.metadata)}`);
+      }
       console.error('Detailed error:', JSON.stringify(error, null, 2));
       throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
     } finally {
-      fs.unlinkSync(tempFilePath);
+      await fs.promises.unlink(tempFilePath).catch(() => {});
     }
   }
 

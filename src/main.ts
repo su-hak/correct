@@ -46,7 +46,8 @@ async function bootstrap() {
   server.setTimeout(300000);
 
   setInterval(() => {
-    console.log('Memory usage:', process.memoryUsage());
+    const memoryUsage = process.memoryUsage();
+    this.logger.log(`Memory usage: ${JSON.stringify(memoryUsage)}`);
   }, 60000);
 
   console.log(`Application is running on: ${await app.getUrl()}`);
