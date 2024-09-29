@@ -43,7 +43,7 @@ export class VisionService {
       }
 
       // 첫 번째 요소는 전체 텍스트이므로 제외
-      const textBlocks = detections.slice(1);
+      const textBlocks = detections.slice(1, 6);
       
       // 텍스트 블록 중에서 가장 큰 5개를 선택 (문장 박스라고 가정)
       const sortedBlocks = textBlocks.sort((a, b) => {
