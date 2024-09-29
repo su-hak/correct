@@ -3,10 +3,12 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import * as express from 'express';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const logger = new Logger('Bootstrap');
 
   app.use((req, res, next) => {
     req.setTimeout(300000, () => {
@@ -47,7 +49,7 @@ async function bootstrap() {
 
   setInterval(() => {
     const memoryUsage = process.memoryUsage();
-    this.logger.log(`Memory usage: ${JSON.stringify(memoryUsage)}`);
+    logger.log(`Memory usage: ${JSON.stringify(memoryUsage)}`);
   }, 60000);
 
   console.log(`Application is running on: ${await app.getUrl()}`);

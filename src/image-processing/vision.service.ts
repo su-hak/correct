@@ -43,6 +43,7 @@ export class VisionService {
     if (!this.isValidImageFormat(imageBuffer)) {
       throw new Error('Unsupported image format');
     }
+    
     try {
       const metadata = await sharp(imageBuffer).metadata();
       this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
