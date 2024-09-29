@@ -18,9 +18,15 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<string[]> {
+    this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
+    this.logger.log(`First few bytes: ${imageBuffer.slice(0, 10).toString('hex')}`);
     this.logger.log(`Detecting text in image, buffer size: ${imageBuffer?.length || 0} bytes`);
     if (!imageBuffer || imageBuffer.length === 0) {
       throw new Error('Invalid image buffer');
+    }
+
+    if (!this.isValidImageFormat(imageBuffer)) {
+      throw new Error('Unsupported image format');
     }
     try {
       this.logger.log(`Starting text detection. Image buffer size: ${imageBuffer.length} bytes`);
@@ -47,10 +53,15 @@ export class VisionService {
     }
   }
 
-  private calculateArea(vertices: Vertex[]): number {
-    if (!vertices || vertices.length < 4) return 0;
-    const [v0, , v2] = vertices;
-    if (!v0?.x || !v0?.y || !v2?.x || !v2?.y) return 0;
-    return Math.abs((v2.x - v0.x) * (v2.y - v0.y));
+  private isValidImageFormat(buffer: Buffer): boolean {
+    // JPEG 시그니처 확인
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      return true;
+    }
+    // PNG 시그니처 확인
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      return true;
+    }
+    return false;
   }
 }
