@@ -53,19 +53,21 @@ export class VisionService {
         return { sentences: [], boundingBoxes: [] };
       }
 
+      const fullText = detections[0].description || '';
+      const sentences = fullText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  
+      const limitedSentences = sentences.slice(0, 5);
+
       // 첫 번째 요소는 전체 텍스트이므로 제외
       const textBlocks = detections.slice(1);
 
-      // 상단에서 하단으로 정렬
-      const sortedBlocks = textBlocks.sort((a, b) => {
-        return (a.boundingPoly?.vertices?.[0]?.y || 0) - (b.boundingPoly?.vertices?.[0]?.y || 0);
+      const boundingBoxes = limitedSentences.map(sentence => {
+        const block = textBlocks.find(b => b.description.includes(sentence));
+        return block ? block.boundingPoly : null;
       });
 
-      const extractedSentences = sortedBlocks.map(block => block.description || '');
-      const boundingBoxes = sortedBlocks.map(block => block.boundingPoly);
-
-      this.logger.log(`Extracted sentences: ${extractedSentences.join(', ')}`);
-      return { sentences: extractedSentences, boundingBoxes };
+      this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
+      return { sentences: limitedSentences, boundingBoxes };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
       if (error.response) {
@@ -75,7 +77,7 @@ export class VisionService {
     }
   }
 
-  async detectTextWithRetry(imageBuffer: Buffer, maxRetries = 3): Promise<{sentences: string[], boundingBoxes: any[]}> {
+  async detectTextWithRetry(imageBuffer: Buffer, maxRetries = 3): Promise<{ sentences: string[], boundingBoxes: any[] }> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.detectTextInImage(imageBuffer);
