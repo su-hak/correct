@@ -20,47 +20,16 @@ export class ImageProcessingController {
     @Post('analyze')
     @UseInterceptors(FileInterceptor('image'))
     async analyzeImage(@UploadedFile() file: Express.Multer.File) {
-        this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
-        if (!file || !file.buffer || file.buffer.length === 0) {
-            throw new BadRequestException('Invalid file uploaded');
-        }
         const jobId = uuidv4();
-
-        // 파일 버퍼를 Base64로 인코딩
-        const base64Image = file.buffer.toString('base64');
-
-        await this.imageProcessingQueue.add('processImage', { jobId, base64Image });
-
-        // 작업 시작 후 결과를 기다립니다
-        let result;
-        for (let i = 0; i < 20; i++) {  // 최대 20초 대기
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
-            result = await this.getStoredResult(jobId);
-            if (result) break;
-        }
-
-        if (!result) {
-            throw new InternalServerErrorException('Failed to process image in time');
-        }
-
-        return result;
-    } catch(error) {
-        this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
-        if (error.response) {
-            this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
-        }
-        throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
+        this.imageProcessingQueue.add('processImage', { jobId, imageBuffer: file.buffer });
+        return { jobId, message: 'Image processing started' };
     }
-
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
         const result = await this.getStoredResult(jobId);
         if (!result) {
-            throw new NotFoundException('Analysis result not found or not ready yet');
-        }
-        if (result.error) {
-            throw new BadRequestException(result.error);
+            throw new NotFoundException('Result not ready');
         }
         return result;
     }
