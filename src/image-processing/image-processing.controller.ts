@@ -43,13 +43,15 @@ export class ImageProcessingController {
             throw new InternalServerErrorException('Failed to process image in time');
         }
 
-        return {
-            sentences: result.sentences,
-            boundingBoxes: result.boundingBoxes,
-            correctSentence: result.correctSentence,
-            correctIndex: result.correctIndex
-          };
+        return result;
+    } catch(error) {
+        this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+        if (error.response) {
+            this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
+        }
+        throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
     }
+
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
