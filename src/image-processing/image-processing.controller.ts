@@ -20,9 +20,25 @@ export class ImageProcessingController {
     @Post('analyze')
     @UseInterceptors(FileInterceptor('image'))
     async analyzeImage(@UploadedFile() file: Express.Multer.File) {
-        const jobId = uuidv4();
-        this.imageProcessingQueue.add('processImage', { jobId, imageBuffer: file.buffer });
-        return { jobId, message: 'Image processing started' };
+      this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
+      if (!file || !file.buffer || file.buffer.length === 0) {
+        throw new BadRequestException('Invalid file uploaded');
+      }
+    
+      try {
+        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(file.buffer);
+        const { correctSentence, correctIndex } = await this.grammarService.findMostNaturalSentence(sentences);
+    
+        return {
+          sentences,
+          boundingBoxes,
+          correctSentence,
+          correctIndex
+        };
+      } catch (error) {
+        this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+        throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
+      }
     }
 
     @Get('result/:jobId')
