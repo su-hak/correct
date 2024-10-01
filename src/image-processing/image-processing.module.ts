@@ -6,6 +6,7 @@ import { GrammarService } from 'src/grammar/grammar.service';
 import { GrammarModule } from 'src/grammar/grammar.module';
 import { ImageProcessingProcessor } from './image-processing.processor';
 import { HttpModule } from '@nestjs/axios';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -14,8 +15,10 @@ import { HttpModule } from '@nestjs/axios';
     }),
     GrammarModule,
     HttpModule,
+    ConfigModule
   ],
   controllers: [ImageProcessingController],
   providers: [VisionService, GrammarService, ImageProcessingProcessor],
+  exports: [VisionService]
 })
 export class ImageProcessingModule {}

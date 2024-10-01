@@ -120,4 +120,19 @@ export class GrammarService {
       .filter(line => line.trim().match(/^\d+\./))
       .map(line => line.replace(/^\d+\.\s*/, '').trim());
   }
+
+  async findMostNaturalSentenceIndex(sentences: string[]): Promise<number> {
+    let mostNaturalIndex = 0;
+    let highestScore = 0;
+
+    for (let i = 0; i < sentences.length; i++) {
+      const score = await this.evaluateSentence(sentences[i]);
+      if (score > highestScore) {
+        highestScore = score;
+        mostNaturalIndex = i;
+      }
+    }
+
+    return mostNaturalIndex;
+  }
 }

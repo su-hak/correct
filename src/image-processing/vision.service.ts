@@ -2,13 +2,17 @@ import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as sharp from 'sharp';
+import { GrammarService } from 'src/grammar/grammar.service';
 
 @Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly apiKey: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private grammarService: GrammarService
+  ) {
     try {
       this.apiKey = this.configService.get('GOOGLE_CLOUD_API_KEY');
       if (!this.apiKey) {
@@ -21,7 +25,7 @@ export class VisionService {
     }
   }
 
-  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[] }> {
+  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[], correctIndex: number }> {
     this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
 
     try {
@@ -52,18 +56,18 @@ export class VisionService {
 
       if (detections.length === 0) {
         this.logger.warn('No text detected in the image');
-        return { sentences: [], boundingBoxes: [] };
+        return { sentences: [], boundingBoxes: [], correctIndex: -1 };
       }
 
       const fullText = detections[0].description || '';
       const sentences = fullText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  
+
       const limitedSentences = sentences.slice(0, 5);
 
       // 첫 번째 요소는 전체 텍스트이므로 제외
       const textBlocks = detections.slice(1);
 
-      const boundingBoxes = limitedSentences.map(sentence => {
+      const boundingBoxes = limitedSentences.map((sentence, index) => {
         const block = textBlocks.find(b => b.description.includes(sentence));
         if (block && block.boundingPoly && block.boundingPoly.vertices) {
           return {
@@ -76,8 +80,14 @@ export class VisionService {
         return null;
       }).filter(box => box !== null);
 
+      // correctIndex 추가
+      const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
+
       this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
-      return { sentences: limitedSentences, boundingBoxes };
+      this.logger.log(`Correct index: ${correctIndex}`);
+      this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
+
+      return { sentences: limitedSentences, boundingBoxes, correctIndex };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
       if (error.response) {
