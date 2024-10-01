@@ -3,14 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as sharp from 'sharp';
 
-@Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly apiKey: string;
 
   constructor(private configService: ConfigService) {
-    // Google Cloud API 키를 환경 변수에서 가져옵니다.
-    this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
+    this.apiKey = this.configService.get('GOOGLE_CLOUD_API_KEY');
     if (!this.apiKey) {
       throw new Error('GOOGLE_CLOUD_API_KEY is not set in the environment variables');
     }
@@ -23,16 +21,13 @@ export class VisionService {
       const metadata = await sharp(imageBuffer).metadata();
       this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
 
-      // 이미지를 JPEG로 변환하고 크기를 조정합니다.
       const resizedBuffer = await sharp(imageBuffer)
         .resize({ width: 800, height: 800, fit: 'inside' })
         .jpeg({ quality: 90 })
         .toBuffer();
 
-      // Base64로 인코딩
       const base64Image = resizedBuffer.toString('base64');
 
-      // Google Cloud Vision API에 직접 HTTP 요청
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
@@ -63,8 +58,16 @@ export class VisionService {
 
       const boundingBoxes = limitedSentences.map(sentence => {
         const block = textBlocks.find(b => b.description.includes(sentence));
-        return block ? block.boundingPoly : null;
-      });
+        if (block && block.boundingPoly && block.boundingPoly.vertices) {
+          return {
+            vertices: block.boundingPoly.vertices.map(v => ({
+              x: v.x / metadata.width,
+              y: v.y / metadata.height
+            }))
+          };
+        }
+        return null;
+      }).filter(box => box !== null);
 
       this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
       return { sentences: limitedSentences, boundingBoxes };
