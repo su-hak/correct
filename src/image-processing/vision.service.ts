@@ -60,12 +60,11 @@ export class VisionService {
       }
 
       const fullText = detections[0].description || '';
-    const sentences = fullText.split(/[.!?]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0)
-      .filter(s => this.isValidSentence(s));  // 유효한 문장만 필터링
+      const sentences = fullText.split('\n')
+        .map(s => s.trim())
+        .filter(s => this.isValidSentence(s));
 
-    const limitedSentences = sentences.slice(0, 5);
+      const limitedSentences = sentences.slice(0, 5);
 
       // 첫 번째 요소는 전체 텍스트이므로 제외
       const textBlocks = detections.slice(1);
@@ -84,14 +83,14 @@ export class VisionService {
         }
         return null;
       }).filter(box => box !== null);
-      
+
       // correctIndex 추가
       const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
-      
+
       this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
       this.logger.log(`Correct index: ${correctIndex}`);
       this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
-      
+
       return { sentences: limitedSentences, boundingBoxes, correctIndex };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
@@ -103,13 +102,10 @@ export class VisionService {
   }
 
   private isValidSentence(sentence: string): boolean {
-    // 영어나 숫자만으로 이루어진 문장 제외
-    if (/^[a-zA-Z0-9\s]+$/.test(sentence)) {
-      return false;
-    }
-
-    // "올바른 문장을 선택해 주세요" 제외
-    if (sentence === "올바른 문장을 선택해 주세요") {
+    // 영어, 숫자, "올바른 문장을 선택해 주세요" 제외
+    if (/^[a-zA-Z0-9\s]+$/.test(sentence) || 
+        sentence === "올바른 문장을 선택해 주세요" ||
+        /^\d+$/.test(sentence)) {
       return false;
     }
 

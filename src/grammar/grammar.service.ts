@@ -3,23 +3,36 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
+interface EvaluationResult {
+  score: number;
+  feedback: string;
+}
+
+interface CacheEntry {
+  result: EvaluationResult;
+  timestamp: number;
+}
+
 @Injectable()
 export class GrammarService {
   private readonly logger = new Logger(GrammarService.name);
   private readonly openaiApiKey: string;
+  private cache: Map<string, CacheEntry> = new Map();
+  private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
   constructor(private configService: ConfigService, private readonly httpService: HttpService) {
-    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
+    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+    const results: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
+    
+    let maxScore = -1;
     let mostNaturalIndex = 0;
-    let highestScore = 0;
-
-    for (let i = 0; i < sentences.length; i++) {
-      const score = await this.evaluateSentence(sentences[i]);
-      if (score > highestScore) {
-        highestScore = score;
+    
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].score > maxScore) {
+        maxScore = results[i].score;
         mostNaturalIndex = i;
       }
     }
@@ -30,23 +43,19 @@ export class GrammarService {
     };
   }
 
-  async evaluateSentence(sentence: string): Promise<number> {
-    // 점수를 평가하는 함수로 수정
-    const isCorrect = await this.isCorrectGrammar(sentence);
-    return isCorrect ? 1 : 0; // 예시로 올바른 문장일 경우 1점을 반환
-  }
-
-  async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
-    for (let i = 0; i < sentences.length; i++) {
-      if (await this.isCorrectGrammar(sentences[i])) {
-        return { correctSentence: sentences[i], correctIndex: i };
-      }
+  private async evaluateSentenceWithCache(sentence: string): Promise<EvaluationResult> {
+    const cachedResult = this.cache.get(sentence);
+    if (cachedResult && Date.now() - cachedResult.timestamp < this.CACHE_TTL) {
+      this.logger.log(`Cache hit for sentence: ${sentence}`);
+      return cachedResult.result;
     }
-    // 모든 문장이 부적절할 경우 첫 번째 문장 반환
-    return { correctSentence: sentences[0], correctIndex: 0 };
+
+    const result = await this.evaluateSentence(sentence);
+    this.cache.set(sentence, { result, timestamp: Date.now() });
+    return result;
   }
 
-  private async isCorrectGrammar(sentence: string): Promise<boolean> {
+  async evaluateSentence(sentence: string): Promise<EvaluationResult> {
     try {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
@@ -55,11 +64,19 @@ export class GrammarService {
           messages: [
             {
               role: "system",
-              content: "당신은 한국어 문법 전문가입니다. 주어진 문장이 문법적으로 올바르고 자연스러운지 판단해주세요."
+              content: "당신은 한국어 문법과 어휘 전문가입니다. 주어진 문장을 분석하고 평가해주세요."
             },
             {
               role: "user",
-              content: `다음 문장이 문법적으로 올바르고 자연스러운지 판단해주세요: "${sentence}" 만약 올바르다면 "올바름"이라고만 답변하고, 그렇지 않다면 "올바르지 않음"이라고만 답변해주세요.`
+              content: `다음 문장을 분석해주세요: "${sentence}"
+
+              1. 모든 단어가 유효하고 실제로 존재하는 단어인가요?
+              2. 문장 구조(주어, 목적어, 서술어 등)가 올바른가요?
+              3. 어순이 자연스러운가요?
+              4. 전체적으로 의미가 명확하고 자연스러운가요?
+              5. 1부터 10까지의 척도로 이 문장의 정확성과 자연스러움을 평가한다면 몇 점을 주시겠습니까?
+
+              각 질문에 대해 간단히 답변해주시고, 마지막으로 점수를 알려주세요.`
             }
           ]
         },
@@ -72,67 +89,52 @@ export class GrammarService {
       );
 
       const aiResponse = response.data.choices[0].message.content.trim();
-      return aiResponse === "올바름";
-    } catch (error) {
-      this.logger.error(`Failed to check grammar: ${error.message}`, error.stack);
-      return false;
-    }
-  }
-
-  async extractAndCheckGrammar(imageDescription: string): Promise<{ correctSentence: string, correctIndex: number }> {
-    this.logger.log(`Extracting sentences and checking grammar for image description`);
-    const openaiApiKey = this.configService.get<string>('OPENAI_API_KEY');
-
-    try {
-      // 1. 이미지 설명에서 문장 추출
-      const extractionPrompt = `다음 이미지 설명에서 정확히 5개의 문장을 추출해주세요:
-      ${imageDescription}
+      const score = this.extractScoreFromResponse(aiResponse);
       
-      각 문장을 번호를 붙여 나열해주세요.`;
-
-      const extractionResponse = await this.callOpenAI(openaiApiKey, extractionPrompt);
-      const extractedSentences = this.parseSentences(extractionResponse);
-
-      // 2. 추출된 문장들 중 문법적으로 정확한 문장 찾기
-      return this.checkGrammar(extractedSentences);
+      return { score, feedback: aiResponse };
     } catch (error) {
-      this.logger.error('Error during sentence extraction and grammar check:', error.stack);
-      throw new Error('문장 추출 및 문법 검사 중 오류가 발생했습니다.');
+      this.logger.error(`Failed to evaluate sentence: ${error.message}`, error.stack);
+      return { score: 0, feedback: "평가 중 오류 발생" };
     }
   }
 
-  private async callOpenAI(apiKey: string, prompt: string): Promise<string> {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-    }, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    return response.data.choices[0].message.content.trim();
+  private extractScoreFromResponse(response: string): number {
+    const scoreMatch = response.match(/(\d+)(?=\s*점)/);
+    return scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
   }
 
-  private parseSentences(response: string): string[] {
-    return response.split('\n')
-      .filter(line => line.trim().match(/^\d+\./))
-      .map(line => line.replace(/^\d+\.\s*/, '').trim());
-  }
-
-  async findMostNaturalSentenceIndex(sentences: string[]): Promise<number> {
-    let mostNaturalIndex = 0;
-    let highestScore = 0;
-
-    for (let i = 0; i < sentences.length; i++) {
-      const score = await this.evaluateSentence(sentences[i]);
-      if (score > highestScore) {
-        highestScore = score;
-        mostNaturalIndex = i;
+  async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+    const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
+    
+    let maxScore = -1;
+    let bestIndex = 0;
+    
+    for (let i = 0; i < evaluations.length; i++) {
+      if (evaluations[i].score > maxScore) {
+        maxScore = evaluations[i].score;
+        bestIndex = i;
       }
     }
 
-    return mostNaturalIndex;
+    return {
+      correctSentence: sentences[bestIndex],
+      correctIndex: bestIndex
+    };
+  }
+
+  async findMostNaturalSentenceIndex(sentences: string[]): Promise<number> {
+    const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
+    
+    let maxScore = -1;
+    let bestIndex = 0;
+    
+    for (let i = 0; i < evaluations.length; i++) {
+      if (evaluations[i].score > maxScore) {
+        maxScore = evaluations[i].score;
+        bestIndex = i;
+      }
+    }
+
+    return bestIndex;
   }
 }
