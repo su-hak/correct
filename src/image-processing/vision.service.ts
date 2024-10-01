@@ -8,9 +8,15 @@ export class VisionService {
   private readonly apiKey: string;
 
   constructor(private configService: ConfigService) {
-    this.apiKey = this.configService.get('GOOGLE_CLOUD_API_KEY');
-    if (!this.apiKey) {
-      throw new Error('GOOGLE_CLOUD_API_KEY is not set in the environment variables');
+    try {
+      this.apiKey = this.configService.get('GOOGLE_CLOUD_API_KEY');
+      if (!this.apiKey) {
+        this.logger.error('GOOGLE_CLOUD_API_KEY is not set in the environment variables');
+        throw new Error('GOOGLE_CLOUD_API_KEY is not set');
+      }
+    } catch (error) {
+      this.logger.error(`Error in VisionService constructor: ${error.message}`);
+      throw error;
     }
   }
 
