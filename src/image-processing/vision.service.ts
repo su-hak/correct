@@ -60,9 +60,12 @@ export class VisionService {
       }
 
       const fullText = detections[0].description || '';
-      const sentences = fullText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const sentences = fullText.split(/[.!?]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .filter(s => this.isValidSentence(s));  // 유효한 문장만 필터링
 
-      const limitedSentences = sentences.slice(0, 5);
+    const limitedSentences = sentences.slice(0, 5);
 
       // 첫 번째 요소는 전체 텍스트이므로 제외
       const textBlocks = detections.slice(1);
@@ -97,6 +100,21 @@ export class VisionService {
       }
       throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
     }
+  }
+
+  private isValidSentence(sentence: string): boolean {
+    // 영어나 숫자만으로 이루어진 문장 제외
+    if (/^[a-zA-Z0-9\s]+$/.test(sentence)) {
+      return false;
+    }
+
+    // "올바른 문장을 선택해 주세요" 제외
+    if (sentence === "올바른 문장을 선택해 주세요") {
+      return false;
+    }
+
+    // 한글이 포함된 문장만 유효하다고 판단
+    return /[가-힣]/.test(sentence);
   }
 
   async detectTextWithRetry(imageBuffer: Buffer, maxRetries = 3): Promise<{ sentences: string[], boundingBoxes: any[] }> {
