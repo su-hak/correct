@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as sharp from 'sharp';
 
+@Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly apiKey: string;
