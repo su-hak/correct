@@ -68,25 +68,27 @@ export class VisionService {
       const textBlocks = detections.slice(1);
 
       const boundingBoxes = limitedSentences.map((sentence, index) => {
-        const block = textBlocks.find(b => b.description.includes(sentence));
-        if (block && block.boundingPoly && block.boundingPoly.vertices) {
+        const block = textBlocks.find(b => b.description.trim() === sentence.trim());
+        if (block && block.boundingBox) {
           return {
-            vertices: block.boundingPoly.vertices.map(v => ({
-              x: v.x / metadata.width,
-              y: v.y / metadata.height
-            }))
+            vertices: [
+              { x: block.boundingBox.vertices[0].x / metadata.width, y: block.boundingBox.vertices[0].y / metadata.height },
+              { x: block.boundingBox.vertices[1].x / metadata.width, y: block.boundingBox.vertices[1].y / metadata.height },
+              { x: block.boundingBox.vertices[2].x / metadata.width, y: block.boundingBox.vertices[2].y / metadata.height },
+              { x: block.boundingBox.vertices[3].x / metadata.width, y: block.boundingBox.vertices[3].y / metadata.height },
+            ]
           };
         }
         return null;
       }).filter(box => box !== null);
-
+      
       // correctIndex 추가
       const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
-
+      
       this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
       this.logger.log(`Correct index: ${correctIndex}`);
       this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
-
+      
       return { sentences: limitedSentences, boundingBoxes, correctIndex };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
