@@ -17,10 +17,10 @@ export class UsersController {
     @ApiResponse({ status: 400, description: 'Bad Request.' })
     async create(@Body() createUserDto: CreateUserDto) {
         const user = await this.usersService.create(createUserDto);
-        return { 
-            id: user.id, 
-            token: user.token, 
-            expiryDate: user.expiryDate 
+        return {
+            id: user.id,
+            token: user.token,
+            expiryDate: user.expiryDate
         };
     }
 
@@ -32,11 +32,13 @@ export class UsersController {
     async login(@Body() loginUserDto: LoginUserDto) {
         try {
             const user = await this.usersService.login(loginUserDto);
-            return {
-                 token: user.token, 
-                 expiryDate: user.expiryDate,
-                 id: user.id 
-                };
+            const response = {
+                token: user.token,
+                expiryDate: user.expiryDate,
+                id: user.id
+            };
+            console.log('Login response:', response);
+            return response;
         } catch (error) {
             if (error instanceof UnauthorizedException) {
                 throw new UnauthorizedException('Token has expired');
