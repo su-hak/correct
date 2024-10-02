@@ -7,6 +7,7 @@ import { GrammarModule } from 'src/grammar/grammar.module';
 import { ImageProcessingProcessor } from './image-processing.processor';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { ConfigModule } from '@nestjs/config';
     }),
     GrammarModule,
     HttpModule,
-    ConfigModule
+    ConfigModule,
+    CacheModule.register(),
   ],
   controllers: [ImageProcessingController],
   providers: [VisionService, GrammarService, ImageProcessingProcessor],
