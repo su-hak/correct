@@ -25,28 +25,51 @@ export class GrammarService {
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+    const filteredSentences = sentences.filter(this.isValidSentence);
+    
     let maxScore = -1;
-    let mostNaturalIndex = 0;
+    let mostNaturalIndex = -1;
     let correctSentence = '';
 
-    for (let i = 0; i < sentences.length; i++) {
-      const result = await this.evaluateSentenceWithCache(sentences[i]);
+    for (let i = 0; i < filteredSentences.length; i++) {
+      const result = await this.evaluateSentenceWithCache(filteredSentences[i]);
       if (result.score > maxScore) {
         maxScore = result.score;
-        mostNaturalIndex = i;
-        correctSentence = sentences[i];
+        mostNaturalIndex = sentences.indexOf(filteredSentences[i]);  // 원래 배열에서의 인덱스를 찾습니다
+        correctSentence = filteredSentences[i];
       }
     }
 
     // 로깅 추가
-    this.logger.log(`Evaluated sentences: ${sentences.join(', ')}`);
+    this.logger.log(`Original sentences: ${sentences.join(', ')}`);
+    this.logger.log(`Filtered sentences: ${filteredSentences.join(', ')}`);
     this.logger.log(`Correct sentence: ${correctSentence}`);
     this.logger.log(`Correct index: ${mostNaturalIndex}`);
 
     return {
-      correctSentence,
-      correctIndex: mostNaturalIndex
+      correctSentence: correctSentence || sentences[0],  // 유효한 문장이 없을 경우 첫 번째 문장 반환
+      correctIndex: mostNaturalIndex !== -1 ? mostNaturalIndex : 0
     };
+  }
+
+  private isValidSentence(sentence: string): boolean {
+    // '올바른 문장을 선택해 주세요' 제외
+    if (sentence.includes('올바른 문장을 선택해 주세요')) {
+      return false;
+    }
+    
+    // 숫자만 있는 문장 제외
+    if (/^\d+$/.test(sentence)) {
+      return false;
+    }
+    
+    // 영어만 있는 문장 제외
+    if (/^[a-zA-Z\s]+$/.test(sentence)) {
+      return false;
+    }
+    
+    // 한글이 포함된 문장만 유효하다고 판단
+    return /[가-힣]/.test(sentence);
   }
 
   private async evaluateSentenceWithCache(sentence: string): Promise<EvaluationResult> {
@@ -76,13 +99,13 @@ export class GrammarService {
               role: "user",
               content: `다음 문장을 분석해주세요: "${sentence}"
 
-              1. 모든 단어가 유효하고 실제로 존재하는 단어인가요?
+              1. 모든 단어가 유효하고 국립국어원의 표준국어대사전에 존재하는 단어인가요?
               2. 문장 구조(주어, 목적어, 서술어 등)가 올바른가요?
               3. 어순이 자연스러운가요?
               4. 전체적으로 의미가 명확하고 자연스러운가요?
               5. 1부터 10까지의 척도로 이 문장의 정확성과 자연스러움을 평가한다면 몇 점을 주시겠습니까?
 
-              각 질문에 대해 간단히 답변해주시고, 마지막으로 점수를 알려주세요.`
+              각 질문에 대한 설명은 필요 하지 않고, 마지막으로 점수를 알려주세요.`
             }
           ]
         },
