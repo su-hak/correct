@@ -1,60 +1,62 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, InternalServerErrorException, Get, Param, NotFoundException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Queue } from 'bull';
-import { InjectQueue } from '@nestjs/bull'
+import { InjectQueue } from '@nestjs/bull';
+import { Inject } from '@nestjs/common';
+import { Cache } from 'cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Controller('image-processing')
 export class ImageProcessingController {
     private readonly logger = new Logger(ImageProcessingController.name);
-    private results: Map<string, any> = new Map();
 
     constructor(
         private readonly visionService: VisionService,
         private readonly grammarService: GrammarService,
-        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
+        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue,
+        @Inject(CACHE_MANAGER) private cacheManager: Cache
     ) { }
 
     @Post('analyze')
     @UseInterceptors(FileInterceptor('image'))
     async analyzeImage(@UploadedFile() file: Express.Multer.File) {
-      this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
-      if (!file || !file.buffer || file.buffer.length === 0) {
-        throw new BadRequestException('Invalid file uploaded');
-      }
-    
-      try {
-        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(file.buffer);
-        const { correctSentence, correctIndex } = await this.grammarService.findMostNaturalSentence(sentences);
-    
-        return {
-          sentences,
-          boundingBoxes,
-          correctSentence,
-          correctIndex
-        };
-      } catch (error) {
-        this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
-        throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
-      }
+        this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
+        if (!file || !file.buffer || file.buffer.length === 0) {
+            throw new BadRequestException('Invalid file uploaded');
+        }
+
+        const jobId = uuidv4();
+        await this.imageProcessingQueue.add('processImage', {
+            jobId,
+            base64Image: file.buffer.toString('base64')
+        }, { removeOnComplete: true });
+
+        return { jobId };
     }
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
-        const result = await this.getStoredResult(jobId);
-        if (!result) {
-            throw new NotFoundException('Result not ready');
+        const cachedResult = await this.cacheManager.get(jobId);
+        if (cachedResult) {
+            return cachedResult;
         }
-        return result;
-    }
 
-    private async storeResult(jobId: string, result: any): Promise<void> {
-        this.results.set(jobId, result);
-    }
+        const job = await this.imageProcessingQueue.getJob(jobId);
+        if (!job) {
+            throw new NotFoundException('Job not found');
+        }
 
-    private async getStoredResult(jobId: string): Promise<any> {
-        return this.results.get(jobId);
+        if (await job.isCompleted()) {
+            const result = job.returnvalue;
+            await this.cacheManager.set(jobId, result, 3600); // Cache for 1 hour
+            return result;
+        } else if (await job.isFailed()) {
+            throw new InternalServerErrorException('Job failed');
+        } else {
+            return { status: 'processing' };
+        }
     }
 }
