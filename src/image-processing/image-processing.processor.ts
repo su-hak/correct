@@ -1,4 +1,4 @@
-import { Process, Processor } from '@nestjs/bull';
+/* import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bull';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { VisionService } from './vision.service';
@@ -58,4 +58,4 @@ export class ImageProcessingProcessor {
             throw error;
         }
     }
-}
+} */

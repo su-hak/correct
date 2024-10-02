@@ -6,6 +6,8 @@ import { InjectQueue } from '@nestjs/bull';
 import { Inject } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { VisionService } from './vision.service';
+import { GrammarService } from 'src/grammar/grammar.service';
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -13,7 +15,9 @@ export class ImageProcessingController {
 
     constructor(
         @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue,
-        @Inject(CACHE_MANAGER) private cacheManager: Cache
+        @Inject(CACHE_MANAGER) private cacheManager: Cache,
+        private readonly visionService: VisionService,
+        private readonly grammarService: GrammarService
     ) { }
 
     @Post('analyze')
@@ -25,56 +29,59 @@ export class ImageProcessingController {
         }
 
         const jobId = uuidv4();
-        await this.imageProcessingQueue.add('processImage', {
-            jobId,
-            base64Image: file.buffer.toString('base64')
-        }, { 
-            removeOnComplete: false,  // 작업 완료 후에도 작업을 유지
-            attempts: 3,  // 실패시 재시도 횟수
-            backoff: {
-                type: 'exponential',
-                delay: 2000
-            }
-        });
+        
+        // 이미지 처리를 즉시 시작하고 결과를 캐시에 저장
+        this.processImageImmediately(jobId, file.buffer);
 
         return { jobId };
+    }
+
+    private async processImageImmediately(jobId: string, imageBuffer: Buffer) {
+        try {
+            const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
+
+            if (sentences.length === 0) {
+                await this.cacheManager.set(jobId, { status: 'no_text_detected' }, 3600);
+                return;
+            }
+
+            // 문법 검사를 병렬로 수행
+            const grammarChecks = await Promise.all(sentences.map(sentence => 
+                this.grammarService.evaluateSentence(sentence)
+            ));
+
+            let maxScore = -1;
+            let correctIndex = 0;
+            grammarChecks.forEach((check, index) => {
+                if (check.score > maxScore) {
+                    maxScore = check.score;
+                    correctIndex = index;
+                }
+            });
+
+            const result = {
+                sentences,
+                boundingBoxes,
+                correctSentence: sentences[correctIndex],
+                correctIndex
+            };
+
+            await this.cacheManager.set(jobId, result, 3600);
+        } catch (error) {
+            this.logger.error(`Error processing image for jobId: ${jobId}`, error.stack);
+            await this.cacheManager.set(jobId, { status: 'error', message: error.message }, 3600);
+        }
     }
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
         this.logger.log(`Fetching result for jobId: ${jobId}`);
 
-        try {
-            const cachedResult = await this.cacheManager.get(jobId);
-            if (cachedResult) {
-                this.logger.log(`Cached result found for jobId: ${jobId}`);
-                return cachedResult;
-            }
-
-            const job = await this.imageProcessingQueue.getJob(jobId);
-            if (!job) {
-                this.logger.warn(`Job not found for jobId: ${jobId}`);
-                return { status: 'not_found' };
-            }
-
-            const jobState = await job.getState();
-            this.logger.log(`Job state for jobId: ${jobId} is ${jobState}`);
-
-            if (jobState === 'completed') {
-                const result = job.returnvalue;
-                this.logger.log(`Job completed for jobId: ${jobId}`);
-                await this.cacheManager.set(jobId, result, 3600);
-                return result;
-            } else if (jobState === 'failed') {
-                this.logger.error(`Job failed for jobId: ${jobId}`);
-                return { status: 'failed' };
-            } else {
-                this.logger.log(`Job still processing for jobId: ${jobId}`);
-                return { status: 'processing' };
-            }
-        } catch (error) {
-            this.logger.error(`Error fetching result for jobId: ${jobId}`, error.stack);
-            throw new InternalServerErrorException('An unexpected error occurred');
+        const cachedResult = await this.cacheManager.get(jobId);
+        if (cachedResult) {
+            return cachedResult;
         }
+
+        return { status: 'processing' };
     }
 }
