@@ -4,7 +4,7 @@ import { VisionService } from './vision.service';
 import { BullModule } from '@nestjs/bull';
 import { GrammarService } from 'src/grammar/grammar.service';
 import { GrammarModule } from 'src/grammar/grammar.module';
-import { ImageProcessingProcessor } from './image-processing.processor';
+/* import { ImageProcessingProcessor } from './image-processing.processor'; */
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -20,7 +20,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     CacheModule.register(),
   ],
   controllers: [ImageProcessingController],
-  providers: [VisionService, GrammarService, ImageProcessingProcessor],
+  providers: [VisionService, GrammarService],
   exports: [VisionService]
 })
 export class ImageProcessingModule {}
