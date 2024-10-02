@@ -32,7 +32,11 @@ export class UsersController {
     async login(@Body() loginUserDto: LoginUserDto) {
         try {
             const user = await this.usersService.login(loginUserDto);
-            return { token: user.token, expiryDate: user.expiryDate };
+            return {
+                 token: user.token, 
+                 expiryDate: user.expiryDate,
+                 id: user.id 
+                };
         } catch (error) {
             if (error instanceof UnauthorizedException) {
                 throw new UnauthorizedException('Token has expired');
