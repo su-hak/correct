@@ -25,20 +25,26 @@ export class GrammarService {
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
-    const results: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
-    
     let maxScore = -1;
     let mostNaturalIndex = 0;
-    
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].score > maxScore) {
-        maxScore = results[i].score;
+    let correctSentence = '';
+
+    for (let i = 0; i < sentences.length; i++) {
+      const result = await this.evaluateSentenceWithCache(sentences[i]);
+      if (result.score > maxScore) {
+        maxScore = result.score;
         mostNaturalIndex = i;
+        correctSentence = sentences[i];
       }
     }
 
+    // 로깅 추가
+    this.logger.log(`Evaluated sentences: ${sentences.join(', ')}`);
+    this.logger.log(`Correct sentence: ${correctSentence}`);
+    this.logger.log(`Correct index: ${mostNaturalIndex}`);
+
     return {
-      correctSentence: sentences[mostNaturalIndex],
+      correctSentence,
       correctIndex: mostNaturalIndex
     };
   }
@@ -90,6 +96,10 @@ export class GrammarService {
 
       const aiResponse = response.data.choices[0].message.content.trim();
       const score = this.extractScoreFromResponse(aiResponse);
+
+      this.logger.log(`Sentence: ${sentence}`);
+      this.logger.log(`AI Response: ${aiResponse}`);
+      this.logger.log(`Extracted Score: ${score}`);
       
       return { score, feedback: aiResponse };
     } catch (error) {
