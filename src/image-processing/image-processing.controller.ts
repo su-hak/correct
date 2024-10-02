@@ -28,7 +28,14 @@ export class ImageProcessingController {
         await this.imageProcessingQueue.add('processImage', {
             jobId,
             base64Image: file.buffer.toString('base64')
-        }, { removeOnComplete: true });
+        }, { 
+            removeOnComplete: false,  // 작업 완료 후에도 작업을 유지
+            attempts: 3,  // 실패시 재시도 횟수
+            backoff: {
+                type: 'exponential',
+                delay: 2000
+            }
+        });
 
         return { jobId };
     }
@@ -38,37 +45,35 @@ export class ImageProcessingController {
         this.logger.log(`Fetching result for jobId: ${jobId}`);
 
         try {
-            // 캐시에서 결과 확인
             const cachedResult = await this.cacheManager.get(jobId);
             if (cachedResult) {
                 this.logger.log(`Cached result found for jobId: ${jobId}`);
                 return cachedResult;
             }
 
-            // 작업 상태 확인
             const job = await this.imageProcessingQueue.getJob(jobId);
             if (!job) {
                 this.logger.warn(`Job not found for jobId: ${jobId}`);
-                throw new NotFoundException('Job not found');
+                return { status: 'not_found' };
             }
 
-            if (await job.isCompleted()) {
+            const jobState = await job.getState();
+            this.logger.log(`Job state for jobId: ${jobId} is ${jobState}`);
+
+            if (jobState === 'completed') {
                 const result = job.returnvalue;
                 this.logger.log(`Job completed for jobId: ${jobId}`);
-                await this.cacheManager.set(jobId, result, 3600); // 1시간 동안 캐시
+                await this.cacheManager.set(jobId, result, 3600);
                 return result;
-            } else if (await job.isFailed()) {
+            } else if (jobState === 'failed') {
                 this.logger.error(`Job failed for jobId: ${jobId}`);
-                throw new InternalServerErrorException('Job failed');
+                return { status: 'failed' };
             } else {
                 this.logger.log(`Job still processing for jobId: ${jobId}`);
                 return { status: 'processing' };
             }
         } catch (error) {
             this.logger.error(`Error fetching result for jobId: ${jobId}`, error.stack);
-            if (error instanceof NotFoundException || error instanceof InternalServerErrorException) {
-                throw error;
-            }
             throw new InternalServerErrorException('An unexpected error occurred');
         }
     }

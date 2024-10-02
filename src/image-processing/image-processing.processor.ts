@@ -24,17 +24,12 @@ export class ImageProcessingProcessor {
         try {
             const imageBuffer = Buffer.from(base64Image, 'base64');
 
-            // Parallel processing of text detection and initial grammar check
-            const [{ sentences, boundingBoxes }, initialGrammarCheck] = await Promise.all([
-                this.visionService.detectTextInImage(imageBuffer),
-                this.grammarService.checkGrammar([''])  // Warm up the grammar service
-            ]);
+            const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
 
             if (sentences.length === 0) {
                 throw new Error('No sentences detected in the image');
             }
 
-            // Parallel grammar checking for all sentences
             const grammarChecks = await Promise.all(sentences.map(sentence => 
                 this.grammarService.evaluateSentence(sentence)
             ));
@@ -55,7 +50,7 @@ export class ImageProcessingProcessor {
                 correctIndex
             };
 
-            await this.cacheManager.set(jobId, result, 3600); // Cache for 1 hour
+            await this.cacheManager.set(jobId, result, 3600);
 
             return result;
         } catch (error) {
