@@ -28,17 +28,9 @@ export class GrammarService {
     const filteredSentences = sentences.filter(this.isValidSentence);
     const evaluations = await Promise.all(filteredSentences.map(sentence => this.evaluateSentenceWithCache(sentence)));
     
-    let maxScore = -1;
-    let mostNaturalIndex = -1;
     const sentenceScores = evaluations.map(evals => evals.score);
-
-    sentenceScores.forEach((score, index) => {
-      if (score > maxScore) {
-        maxScore = score;
-        mostNaturalIndex = index;
-      }
-    });
-
+    const maxScore = Math.max(...sentenceScores);
+    const mostNaturalIndex = sentenceScores.indexOf(maxScore);
     const correctSentence = filteredSentences[mostNaturalIndex];
     const correctIndex = sentences.indexOf(correctSentence);
 
@@ -97,11 +89,11 @@ export class GrammarService {
           messages: [
             {
               role: "system",
-              content: "당신은 한국어 문법과 어휘 전문가입니다. 주어진 문장을 분석하고 평가해주세요."
+              content: "주어진 한국어 문장의 문법적 정확성과 자연스러움을 1부터 100까지의 점수로 평가하세요. 점수만 응답하세요."
             },
             {
               role: "user",
-              content: `다음 문장을 분석해주세요(설명은 필요 없어요.): "${sentence}"
+              content: `${sentence}
 
               단어의 유효성: 모든 단어가 표준국어대사전에 등재된 단어인가요?
               문법적 정확성: 문법 구조(주어, 목적어, 서술어 등 도치법 허용 안 함)가 올바른가요?
@@ -109,7 +101,9 @@ export class GrammarService {
               문장의 자연스러움: 어순, 조사 사용, 단어 선택이 자연스러운가요?
               종합 점수: 1부터 100까지 척도로 전체 문장의 자연스러움과 정확성을 평가해 주세요.`
             }
-          ]
+          ],
+          temperature: 0.3,
+          max_tokens: 10,
         },
         {
           headers: {
@@ -119,14 +113,10 @@ export class GrammarService {
         }
       );
 
-      const aiResponse = response.data.choices[0].message.content.trim();
-      const score = this.extractScoreFromResponse(aiResponse);
-
-      this.logger.log(`Sentence: ${sentence}`);
-      this.logger.log(`AI Response: ${aiResponse}`);
-      this.logger.log(`Extracted Score: ${score}`);
+      const score = parseInt(response.data.choices[0].message.content.trim(), 10);
+      this.logger.log(`Sentence: ${sentence}, Score: ${score}`);
       
-      return { score, feedback: aiResponse };
+      return { score, feedback: '' };
     } catch (error) {
       this.logger.error(`Failed to evaluate sentence: ${error.message}`, error.stack);
       return { score: 0, feedback: "평가 중 오류 발생" };
