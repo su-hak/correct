@@ -5,6 +5,7 @@ import { GrammarService } from '../grammar/grammar.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Job, Queue } from 'bull';
 import { InjectQueue, Process } from '@nestjs/bull'
+import { ResultStorageService } from './result-storage.service';
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -14,7 +15,8 @@ export class ImageProcessingController {
     constructor(
         private readonly visionService: VisionService,
         private readonly grammarService: GrammarService,
-        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
+        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue,
+        private readonly resultStorageService: ResultStorageService
     ) { }
 
     @Post('analyze')
@@ -28,12 +30,10 @@ export class ImageProcessingController {
         try {
 
             const jobId = uuidv4();
-            await this.imageProcessingQueue.add('processImage', {
-                jobId,
-                fileBuffer: file.buffer
-            });
-
+            await this.resultStorageService.storeResult(jobId, { status: 'processing' });
+            await this.imageProcessingQueue.add('processImage', { jobId, fileBuffer: file.buffer });
             return { jobId };
+
         } catch (error) {
             this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
             throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
@@ -64,15 +64,19 @@ export class ImageProcessingController {
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
-        const result = await this.getStoredResult(jobId);
+        const result = await this.resultStorageService.getResult(jobId);
         if (!result) {
-            throw new NotFoundException('Result not ready');
+            throw new NotFoundException('Result not found');
+        }
+        if (result.status === 'processing') {
+            return { status: 'processing' };
         }
         if (result.error) {
             throw new InternalServerErrorException(result.error);
         }
         return result;
     }
+
 
 
     private async storeResult(jobId: string, result: any): Promise<void> {

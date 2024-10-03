@@ -3,6 +3,7 @@ import { Job } from 'bull';
 import { Injectable, Logger } from '@nestjs/common';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
+import { ResultStorageService } from './result-storage.service';
 
 @Injectable()
 @Processor('image-processing')
@@ -12,50 +13,29 @@ export class ImageProcessingProcessor {
 
     constructor(
         private readonly visionService: VisionService,
-        private readonly grammarService: GrammarService
+        private readonly grammarService: GrammarService,
+        private readonly resultStorageService: ResultStorageService
     ) { }
 
     @Process('processImage')
     async handleProcessImage(job: Job) {
-        this.logger.log(`Processing image job ${job.id}`);
-        const { jobId, base64Image } = job.data;
-        this.logger.log(`Processing job ${jobId}, image data length: ${base64Image?.length || 0}`);
-
-        if (!base64Image) {
-            throw new Error('Invalid image data');
-        }
-
-        try {
-            // Base64를 버퍼로 변환
-            const imageBuffer = Buffer.from(base64Image, 'base64');
-
-            // 이미지 처리 로직...
-            const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
-
-            if (sentences.length === 0) {
-                throw new Error('No sentences detected in the image');
-            }
-
-            // 문법 검사 및 올바른 문장 찾기
-            const { correctSentence, correctIndex } = await this.grammarService.checkGrammar(sentences);
-
-            // 결과 저장
-            const result = {
-                sentences,
-                boundingBoxes,
-                correctSentence,
-                correctIndex
-            };
-            await this.storeResult(jobId, result);
-
-            this.logger.log(`Job ${job.id} completed successfully`);
-        } catch (error) {
-            this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
-            await this.storeResult(jobId, { error: error.message });
-        }
+      const { jobId, fileBuffer } = job.data;
+      try {
+        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(fileBuffer);
+        const { correctSentence, correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+        
+        const result = {
+          sentences,
+          boundingBoxes,
+          correctSentence,
+          correctIndex: parseInt(correctIndex.toString()),
+          sentenceScores: sentenceScores.map(score => parseFloat(score.toFixed(0)))
+        };
+        
+        await this.resultStorageService.storeResult(jobId, result);
+      } catch (error) {
+        await this.resultStorageService.storeResult(jobId, { error: error.message });
+      }
     }
 
-    private async storeResult(jobId: string, result: any): Promise<void> {
-        this.results.set(jobId, result);
-    }
 }
