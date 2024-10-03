@@ -1,61 +1,61 @@
-/* import { Process, Processor } from '@nestjs/bull';
+import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bull';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
-import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Injectable()
 @Processor('image-processing')
 export class ImageProcessingProcessor {
     private readonly logger = new Logger(ImageProcessingProcessor.name);
+    private results: Map<string, any> = new Map();
 
     constructor(
         private readonly visionService: VisionService,
-        private readonly grammarService: GrammarService,
-        @Inject(CACHE_MANAGER) private cacheManager: Cache
+        private readonly grammarService: GrammarService
     ) { }
 
     @Process('processImage')
     async handleProcessImage(job: Job) {
         this.logger.log(`Processing image job ${job.id}`);
         const { jobId, base64Image } = job.data;
+        this.logger.log(`Processing job ${jobId}, image data length: ${base64Image?.length || 0}`);
+
+        if (!base64Image) {
+            throw new Error('Invalid image data');
+        }
 
         try {
+            // Base64를 버퍼로 변환
             const imageBuffer = Buffer.from(base64Image, 'base64');
 
+            // 이미지 처리 로직...
             const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
 
             if (sentences.length === 0) {
                 throw new Error('No sentences detected in the image');
             }
 
-            const grammarChecks = await Promise.all(sentences.map(sentence => 
-                this.grammarService.evaluateSentence(sentence)
-            ));
+            // 문법 검사 및 올바른 문장 찾기
+            const { correctSentence, correctIndex } = await this.grammarService.checkGrammar(sentences);
 
-            let maxScore = -1;
-            let correctIndex = 0;
-            grammarChecks.forEach((check, index) => {
-                if (check.score > maxScore) {
-                    maxScore = check.score;
-                    correctIndex = index;
-                }
-            });
-
+            // 결과 저장
             const result = {
                 sentences,
                 boundingBoxes,
-                correctSentence: sentences[correctIndex],
+                correctSentence,
                 correctIndex
             };
+            await this.storeResult(jobId, result);
 
-            await this.cacheManager.set(jobId, result, 3600);
-
-            return result;
+            this.logger.log(`Job ${job.id} completed successfully`);
         } catch (error) {
             this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
-            throw error;
+            await this.storeResult(jobId, { error: error.message });
         }
     }
-} */
+
+    private async storeResult(jobId: string, result: any): Promise<void> {
+        this.results.set(jobId, result);
+    }
+}
