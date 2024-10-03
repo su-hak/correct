@@ -16,4 +16,7 @@ export class User {
 
   @Column()
   expiryDate: Date;
+
+  @Column({ nullable: true })
+  deviceId: string;
 }

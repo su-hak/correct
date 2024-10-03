@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsDate, IsInt, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsDate, IsInt, Min, Max, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -17,9 +17,10 @@ export class CreateUserDto {
   @ApiProperty({ example: 'john@example.com', description: 'The contact information of the user' })
   contact: string;
 
-  @ApiProperty({ example: '30', description: 'Token validity duration in days' })
-  @IsInt()
+  @ApiProperty({ required: false, example: '30', description: '토큰 유효 기간 (일)' })
+  @IsNumber()
   @Min(1)
+  @Max(365)
   expiryDate: number;
 }
 
@@ -28,4 +29,9 @@ export class LoginUserDto {
     @IsNotEmpty()
     @ApiProperty({ example: 'john_doe' })
     id?: string;
+    
+    @IsString()
+    @IsNotEmpty()
+    @ApiProperty({ example: 'john_doe' })
+    deviceId: string;
 }

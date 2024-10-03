@@ -29,9 +29,9 @@ export class UsersController {
     @ApiOperation({ summary: '로그인' })
     @ApiResponse({ status: 200, description: 'Login successful.', type: User })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async login(@Body() loginUserDto: LoginUserDto) {
+    async login(@Body() loginUserDto: LoginUserDto, deviceId) {
         try {
-            const user = await this.usersService.login(loginUserDto);
+            const user = await this.usersService.login(loginUserDto, deviceId);
             const response = {
                 token: user.token,
                 expiryDate: user.expiryDate,
@@ -50,9 +50,12 @@ export class UsersController {
     @Post(':id/refresh-token')
     @ApiOperation({ summary: '토큰 재생성' })
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
-    async refreshToken(@Param('id') id: string) {
-        const user = await this.usersService.updateToken(id);
-        return { token: user.token, expiryDate: user.expiryDate };
+    async refreshToken(
+      @Param('id') id: string,
+      @Body('expiryDate') expiryDate: number
+    ) {
+      const user = await this.usersService.updateToken(id, expiryDate);
+      return { token: user.token, expiryDate: user.expiryDate };
     }
 
     @Get()

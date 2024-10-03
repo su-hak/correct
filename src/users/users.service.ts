@@ -21,34 +21,34 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async login(loginUserDto: LoginUserDto): Promise<User> {
+  async login(loginUserDto: LoginUserDto, deviceId: string): Promise<User> {
     const { id } = loginUserDto;
-    console.log(`Attempting to login with id: ${id}`);
-    
     const user = await this.usersRepository.findOne({ where: { id } });
-    console.log(`User found:`, user);
     
     if (!user) {
-      console.log(`User not found for id: ${id}`);
       throw new NotFoundException('User not found');
     }
     
     if (new Date() > user.expiryDate) {
-      console.log(`Token expired for user: ${id}`);
       throw new UnauthorizedException('Token has expired');
     }
+
+    if (user.deviceId !== deviceId) {
+      user.deviceId = deviceId;
+      await this.usersRepository.save(user);
+    }
     
-    console.log(`Login successful for user: ${id}`);
     return user;
   }
 
-  async updateToken(id: string): Promise<User> {
+  async updateToken(id: string, expiryDate: number): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
     user.token = uuidv4();
-    user.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+    user.expiryDate = new Date(Date.now() + expiryDate * 24 * 60 * 60 * 1000); // 30 days from now
+    user.deviceId = null;
     return this.usersRepository.save(user);
   }
 
