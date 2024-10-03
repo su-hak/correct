@@ -10,8 +10,6 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  app.useGlobalPipes(new ValidationPipe({ transform: true }));
-
   app.use((req, res, next) => {
     req.setTimeout(300000, () => {
       res.status(408).send('Request Timeout');
