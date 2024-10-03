@@ -1,41 +1,66 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bull';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
-import { ResultStorageService } from './result-storage.service';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Injectable()
 @Processor('image-processing')
 export class ImageProcessingProcessor {
     private readonly logger = new Logger(ImageProcessingProcessor.name);
-    private results: Map<string, any> = new Map();
 
     constructor(
         private readonly visionService: VisionService,
         private readonly grammarService: GrammarService,
-        private readonly resultStorageService: ResultStorageService
+        @Inject(CACHE_MANAGER) private cacheManager: Cache
     ) { }
 
     @Process('processImage')
     async handleProcessImage(job: Job) {
-      const { jobId, fileBuffer } = job.data;
-      try {
-        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(fileBuffer);
-        const { correctSentence, correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
-        
-        const result = {
-          sentences,
-          boundingBoxes,
-          correctSentence,
-          correctIndex: parseInt(correctIndex.toString()),
-          sentenceScores: sentenceScores.map(score => parseFloat(score.toFixed(0)))
-        };
-        
-        await this.resultStorageService.storeResult(jobId, result);
-      } catch (error) {
-        await this.resultStorageService.storeResult(jobId, { error: error.message });
-      }
-    }
+        this.logger.log(`Processing image job ${job.id}`);
+        const { jobId, base64Image } = job.data;
 
+        try {
+            const imageBuffer = Buffer.from(base64Image, 'base64');
+
+            // Parallel processing of text detection and initial grammar check
+            const [{ sentences, boundingBoxes }, initialGrammarCheck] = await Promise.all([
+                this.visionService.detectTextInImage(imageBuffer),
+                this.grammarService.checkGrammar([''])  // Warm up the grammar service
+            ]);
+
+            if (sentences.length === 0) {
+                throw new Error('No sentences detected in the image');
+            }
+
+            // Parallel grammar checking for all sentences
+            const grammarChecks = await Promise.all(sentences.map(sentence => 
+                this.grammarService.evaluateSentence(sentence)
+            ));
+
+            let maxScore = -1;
+            let correctIndex = 0;
+            grammarChecks.forEach((check, index) => {
+                if (check.score > maxScore) {
+                    maxScore = check.score;
+                    correctIndex = index;
+                }
+            });
+
+            const result = {
+                sentences,
+                boundingBoxes,
+                correctSentence: sentences[correctIndex],
+                correctIndex
+            };
+
+            await this.cacheManager.set(jobId, result, 3600); // Cache for 1 hour
+
+            return result;
+        } catch (error) {
+            this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
 }

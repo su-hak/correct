@@ -8,7 +8,6 @@ import { GrammarModule } from 'src/grammar/grammar.module';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
-import { ResultStorageService } from './result-storage.service';
 
 @Module({
   imports: [
@@ -21,7 +20,7 @@ import { ResultStorageService } from './result-storage.service';
     CacheModule.register(),
   ],
   controllers: [ImageProcessingController],
-  providers: [VisionService, GrammarService, ResultStorageService],
-  exports: [VisionService],
+  providers: [VisionService, GrammarService],
+  exports: [VisionService]
 })
 export class ImageProcessingModule {}
