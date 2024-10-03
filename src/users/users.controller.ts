@@ -72,23 +72,11 @@ export class UsersController {
         return this.usersService.remove(id);
     }
 
-    @Delete('all')
+    @Delete('delete-all')
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: '모든 사용자 삭제' })
-    @ApiResponse({
-        status: 204,
-        description: '모든 사용자가 성공적으로 삭제됨',
-        schema: {
-            type: 'object',
-            properties: {
-                message: {
-                    type: 'string',
-                    example: '모든 사용자가 삭제되었습니다.'
-                }
-            }
-        }
-    })
+    @ApiResponse({ status: 204, description: '모든 사용자가 성공적으로 삭제됨' })
     async deleteAllUsers(): Promise<void> {
-        await this.usersService.deleteAllUsers();
+      await this.usersService.deleteAllUsers();
     }
 }

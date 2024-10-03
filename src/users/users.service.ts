@@ -69,6 +69,6 @@ export class UsersService {
   }
 
   async deleteAllUsers(): Promise<void> {
-    await this.usersRepository.clear();
+    await this.usersRepository.query('DELETE FROM users');
   }
 }
