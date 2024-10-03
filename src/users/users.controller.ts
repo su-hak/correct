@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
 import { CreateUserDto, LoginUserDto } from './dto/users.dto';
@@ -51,11 +51,11 @@ export class UsersController {
     @ApiOperation({ summary: '토큰 재생성' })
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
     async refreshToken(
-      @Param('id') id: string,
-      @Body('expiryDate') expiryDate: number
+        @Param('id') id: string,
+        @Body('expiryDate') expiryDate: number
     ) {
-      const user = await this.usersService.updateToken(id, expiryDate);
-      return { token: user.token, expiryDate: user.expiryDate };
+        const user = await this.usersService.updateToken(id, expiryDate);
+        return { token: user.token, expiryDate: user.expiryDate };
     }
 
     @Get()
@@ -70,5 +70,25 @@ export class UsersController {
     @ApiResponse({ status: 200, description: 'User deleted successfully.' })
     remove(@Param('id') id: string) {
         return this.usersService.remove(id);
+    }
+
+    @Delete('all')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: '모든 사용자 삭제' })
+    @ApiResponse({
+        status: 204,
+        description: '모든 사용자가 성공적으로 삭제됨',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: '모든 사용자가 삭제되었습니다.'
+                }
+            }
+        }
+    })
+    async deleteAllUsers(): Promise<void> {
+        await this.usersService.deleteAllUsers();
     }
 }
