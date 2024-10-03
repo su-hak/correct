@@ -1,8 +1,10 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, Get, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
 import { v4 as uuidv4 } from 'uuid';
+import { Queue } from 'bull';
+import { InjectQueue } from '@nestjs/bull'
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -12,63 +14,41 @@ export class ImageProcessingController {
     constructor(
         private readonly visionService: VisionService,
         private readonly grammarService: GrammarService,
+        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
     ) { }
 
     @Post('analyze')
     @UseInterceptors(FileInterceptor('image'))
     async analyzeImage(@UploadedFile() file: Express.Multer.File) {
-        this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
-        if (!file || !file.buffer || file.buffer.length === 0) {
-            throw new BadRequestException('Invalid file uploaded');
-        }
+      this.logger.log(`Received file: ${file ? 'yes' : 'no'}, size: ${file?.buffer?.length || 0} bytes`);
+      if (!file || !file.buffer || file.buffer.length === 0) {
+        throw new BadRequestException('Invalid file uploaded');
+      }
     
-        const jobId = uuidv4();
-
-        // 비동기로 이미지 처리 시작
-        this.processImageAsync(jobId, file.buffer);
-
-        return { jobId };
-    }
-
-    private async processImageAsync(jobId: string, imageBuffer: Buffer) {
-        try {
-            const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(imageBuffer);
-            
-            if (sentences.length === 0) {
-                await this.storeResult(jobId, { status: 'completed', result: { sentences: [], boundingBoxes: [], correctSentence: '', correctIndex: -1 } });
-                return;
-            }
-
-            const { correctSentence, correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
-
-            const result = {
-                sentences,
-                boundingBoxes,
-                correctSentence,
-                correctIndex,
-                sentenceScores
-            };
-
-            await this.storeResult(jobId, { status: 'completed', result });
-        } catch (error) {
-            this.logger.error(`Error processing image for jobId: ${jobId}`, error.stack);
-            await this.storeResult(jobId, { status: 'error', message: error.message });
-        }
+      try {
+        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(file.buffer);
+        const { correctSentence, correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+  
+        return {
+          sentences,
+          boundingBoxes,
+          correctSentence,
+          correctIndex: parseInt(correctIndex.toString()), // 정수로 변환
+          sentenceScores
+        };
+      } catch (error) {
+        this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
+        throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
+      }
     }
 
     @Get('result/:jobId')
     async getAnalysisResult(@Param('jobId') jobId: string) {
         const result = await this.getStoredResult(jobId);
         if (!result) {
-            throw new NotFoundException('Result not found');
+            throw new NotFoundException('Result not ready');
         }
-        if (result.status === 'error') {
-            throw new InternalServerErrorException(result.message);
-        }
-        if (result.status === 'completed') {
-            return result.result;
-        }
-        return { status: 'processing' };
+        return result;
     }
 
     private async storeResult(jobId: string, result: any): Promise<void> {
