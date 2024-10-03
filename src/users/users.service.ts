@@ -33,7 +33,7 @@ export class UsersService {
       throw new UnauthorizedException('Token has expired');
     }
 
-    console.log('Before update:', user);
+    console.log('Received deviceId:', deviceId);
     if (user.deviceId !== deviceId) {
       user.deviceId = deviceId;
       await this.usersRepository.save(user);

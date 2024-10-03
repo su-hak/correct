@@ -18,7 +18,7 @@ export class AuthController {
   @Post('login')
   async login(@Body() loginUserDto: LoginUserDto) {
     console.log('Received login data:', loginUserDto);
-    return this.authService.login(loginUserDto.id, loginUserDto.deviceId);
+    return this.authService.login(loginUserDto.id, loginUserDto.deviceId || '');
   }
 
   @Get('validate')
