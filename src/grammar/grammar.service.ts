@@ -89,7 +89,7 @@ export class GrammarService {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-3.5-turbo",
+          model: "gpt-4o mini",
           messages: [
             {
               role: "system",
@@ -101,7 +101,7 @@ export class GrammarService {
 
               단어의 유효성: 모든 단어가 표준국어대사전에 등재된 단어인가요?
               문법적 정확성: 문법 구조(주어, 목적어, 서술어 등 도치법 허용 안 함)가 올바른가요?
-              의미의 명확성: 문장이 해석에 혼동 없이 명확하게 전달되나요?
+              의미의 명확성: 문장이 해석에 혼동 없이 명확하게 전달되나요(모호하지는 않나요?)?
               문장의 자연스러움: 어순, 조사 사용, 단어 선택이 자연스러운가요?
               종합 점수: 1부터 100까지 척도로 전체 문장의 자연스러움과 정확성을 평가해 주세요.`
             }
