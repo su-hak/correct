@@ -26,12 +26,12 @@ export class AuthService {
       const user = await this.usersService.findOne(payload.sub);
       
       if (!user || user.deviceId !== deviceId || new Date() > user.expiryDate) {
-        throw new UnauthorizedException('Invalid token, device, or expired');
+        return null; // 유효하지 않은 토큰이나 사용자
       }
       
       return user;
     } catch (error) {
-      throw new UnauthorizedException('Invalid token');
+      return null; // 토큰 검증 실패
     }
   }
 }
