@@ -13,7 +13,7 @@ export class AuthService {
   ) {}
 
   async login(id: string, deviceId: string): Promise<any> {
-    console.log('Login attempt with:', { id, deviceId });
+    console.log('Login attempt in AuthService:', { id, deviceId });
     const user = await this.validateUser(id);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');

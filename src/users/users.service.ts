@@ -23,6 +23,8 @@ export class UsersService {
 
   async login(loginUserDto: LoginUserDto, deviceId: string): Promise<User> {
     const { id } = loginUserDto;
+    console.log('Login attempt in UsersService:', { id, deviceId });
+
     const user = await this.usersRepository.findOne({ where: { id } });
 
     if (!user) {
@@ -33,12 +35,17 @@ export class UsersService {
       throw new UnauthorizedException('Token has expired');
     }
 
+    console.log('Current user deviceId:', user.deviceId);
     console.log('Received deviceId:', deviceId);
-    if (user.deviceId !== deviceId) {
+
+    if (deviceId && user.deviceId !== deviceId) {
       user.deviceId = deviceId;
-      await this.usersRepository.save(user);
-      console.log('After update:', user);
+      const updatedUser = await this.usersRepository.save(user);
+      console.log('Updated user:', JSON.stringify(updatedUser, null, 2));
+    } else {
+      console.log('DeviceId unchanged');
     }
+    
     return user;
   }
 

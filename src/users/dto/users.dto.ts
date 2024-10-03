@@ -28,10 +28,10 @@ export class LoginUserDto {
     @IsString()
     @IsNotEmpty()
     @ApiProperty({ example: 'john_doe' })
-    id?: string;
+    id: string;
     
     @IsString()
     @IsNotEmpty()
-    @ApiProperty({ example: 'john_doe' })
+    @ApiProperty({ example: 'd25h5t21-bbq6-404c-a126-324d377db54d' })
     deviceId: string;
 }
