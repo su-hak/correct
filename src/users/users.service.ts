@@ -73,7 +73,6 @@ export class UsersService {
     console.log('Saving user:', user);
     const savedUser = await this.usersRepository.save(user);
     console.log('Saved user:', savedUser);
-    console.log('SQL Query:', this.usersRepository.createQueryBuilder().updateEntity(user).getQuery());
     return savedUser;
   }
 }
