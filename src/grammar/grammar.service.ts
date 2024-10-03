@@ -35,19 +35,19 @@ export class GrammarService {
       const result = await this.evaluateSentenceWithCache(filteredSentences[i]);
       if (result.score > maxScore) {
         maxScore = result.score;
-        mostNaturalIndex = sentences.indexOf(filteredSentences[i]);  // 원래 배열에서의 인덱스를 찾습니다
+        mostNaturalIndex = sentences.indexOf(filteredSentences[i]);
         correctSentence = filteredSentences[i];
       }
     }
 
-    // 로깅 추가
     this.logger.log(`Original sentences: ${sentences.join(', ')}`);
     this.logger.log(`Filtered sentences: ${filteredSentences.join(', ')}`);
     this.logger.log(`Correct sentence: ${correctSentence}`);
     this.logger.log(`Correct index: ${mostNaturalIndex}`);
+    this.logger.log(`Max score: ${maxScore}`);
 
     return {
-      correctSentence: correctSentence || sentences[0],  // 유효한 문장이 없을 경우 첫 번째 문장 반환
+      correctSentence: correctSentence || sentences[0],
       correctIndex: mostNaturalIndex !== -1 ? mostNaturalIndex : 0
     };
   }
@@ -138,8 +138,13 @@ export class GrammarService {
   }
 
   private extractScoreFromResponse(response: string): number {
-    const scoreMatch = response.match(/(\d+)(?=\s*점)/);
-    return scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
+    const lines = response.split('\n');
+    const scoreLine = lines.find(line => line.includes('전체 점수:') || line.includes('종합 평가:'));
+    if (scoreLine) {
+      const scoreMatch = scoreLine.match(/(\d+(\.\d+)?)/);
+      return scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+    }
+    return 0;
   }
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
