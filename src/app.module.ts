@@ -32,7 +32,7 @@ import { CacheModule } from '@nestjs/cache-manager';
             password: matches[2],
             database: matches[5],
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
-            synchronize: false,
+            synchronize: true,
             logging: true,
           };
         } else {
