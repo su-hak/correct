@@ -29,7 +29,7 @@ export class AuthController {
     const payload = { sub: user.id, deviceId: user.deviceId };
     const token = this.jwtService.sign(payload);
     return {
-      access_token: token,
+      token: token,
       expiryDate: user.expiryDate,
       id: user.id
     };
