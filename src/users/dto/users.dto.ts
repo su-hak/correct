@@ -33,5 +33,5 @@ export class LoginUserDto {
     @IsString()
     @IsNotEmpty()
     @ApiProperty({ example: 'john_doe' })
-    deviceId: string;
+    deviceId?: string;
 }

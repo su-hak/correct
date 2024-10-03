@@ -12,6 +12,26 @@ export class AuthService {
     private usersService: UsersService
   ) {}
 
+  async login(id: string, deviceId: string): Promise<any> {
+    const user = await this.validateUser(id);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // deviceId 업데이트
+    user.deviceId = deviceId;
+    await this.usersService.save(user);
+
+    const payload = { sub: user.id, deviceId: user.deviceId };
+    const token = this.jwtService.sign(payload);
+    
+    return {
+      token: token,
+      expiryDate: user.expiryDate,
+      id: user.id
+    };
+  }
+
   async validateToken(token: string, deviceId: string): Promise<boolean> {
     try {
       const payload = this.jwtService.verify(token);

@@ -16,23 +16,8 @@ export class AuthController {
   ) { }
 
   @Post('login')
-  async login(@Body() loginUserDto: { id: string; deviceId: string }) {
-    const user = await this.authService.validateUser(loginUserDto.id);
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // deviceId 업데이트
-    user.deviceId = loginUserDto.deviceId;
-    await this.usersService.save(user);
-
-    const payload = { sub: user.id, deviceId: user.deviceId };
-    const token = this.jwtService.sign(payload);
-    return {
-      token: token,
-      expiryDate: user.expiryDate,
-      id: user.id
-    };
+  async login(@Body() loginUserDto: LoginUserDto) {
+    return this.authService.login(loginUserDto.id, loginUserDto.deviceId);
   }
 
   @Get('validate')
