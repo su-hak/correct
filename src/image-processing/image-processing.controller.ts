@@ -26,14 +26,15 @@ export class ImageProcessingController {
       }
     
       try {
-        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(file.buffer);
-        const { correctSentence, correctIndex } = await this.grammarService.findMostNaturalSentence(sentences);
-    
+        const { sentences, boundingBoxes, correctIndex, sentenceScores } = await this.visionService.detectTextInImage(file.buffer);
+        const { correctSentence } = await this.grammarService.findMostNaturalSentence(sentences);
+  
         return {
           sentences,
           boundingBoxes,
           correctSentence,
-          correctIndex
+          correctIndex,
+          sentenceScores
         };
       } catch (error) {
         this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);

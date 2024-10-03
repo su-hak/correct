@@ -25,7 +25,7 @@ export class VisionService {
     }
   }
 
-  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[], correctIndex: number }> {
+  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[], correctIndex: number, sentenceScores: number[] }> {
     this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
 
     try {
@@ -56,7 +56,7 @@ export class VisionService {
 
       if (detections.length === 0) {
         this.logger.warn('No text detected in the image');
-        return { sentences: [], boundingBoxes: [], correctIndex: -1 };
+        return { sentences: [], boundingBoxes: [], correctIndex: -1, sentenceScores: [] };
       }
 
       const fullText = detections[0].description || '';
@@ -84,14 +84,20 @@ export class VisionService {
         return null;
       }).filter(box => box !== null);
 
-      // correctIndex 추가
-      const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
+      // GrammarService를 사용하여 각 문장의 점수를 얻습니다.
+    const sentenceScores = await Promise.all(limitedSentences.map(sentence => 
+      this.grammarService.evaluateSentence(sentence).then(result => result.score)
+    ));
 
-      this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
-      this.logger.log(`Correct index: ${correctIndex}`);
-      this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
+    // correctIndex 계산
+    const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
 
-      return { sentences: limitedSentences, boundingBoxes, correctIndex };
+    this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
+    this.logger.log(`Sentence scores: ${sentenceScores.join(', ')}`);
+    this.logger.log(`Correct index: ${correctIndex}`);
+    this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
+
+    return { sentences: limitedSentences, boundingBoxes, correctIndex, sentenceScores };
     } catch (error) {
       this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
       if (error.response) {

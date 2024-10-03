@@ -1,95 +1,78 @@
-import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { chunk } from 'lodash';
 
 interface EvaluationResult {
   score: number;
   feedback: string;
 }
 
-interface CacheEntry {
-  result: EvaluationResult;
-  timestamp: number;
-}
-
 @Injectable()
 export class GrammarService {
   private readonly logger = new Logger(GrammarService.name);
   private readonly openaiApiKey: string;
-  private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  private readonly MAX_CONCURRENT_REQUESTS = 5;
+  private readonly CHUNK_SIZE = 10;
 
-  constructor(private configService: ConfigService, private readonly httpService: HttpService) {
+  constructor(private configService: ConfigService) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
   }
 
-  async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+  async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number, sentenceScores: number[] }> {
     const filteredSentences = sentences.filter(this.isValidSentence);
+    const evaluations = await this.evaluateSentences(filteredSentences);
+    const sentenceScores = evaluations.map((evaluation) => evaluation.score);
 
-    let maxScore = -1;
-    let mostNaturalIndex = -1;
-    let correctSentence = '';
-
-    for (let i = 0; i < filteredSentences.length; i++) {
-      const result = await this.evaluateSentenceWithCache(filteredSentences[i]);
-      if (result.score > maxScore) {
-        maxScore = result.score;
-        mostNaturalIndex = sentences.indexOf(filteredSentences[i]);
-        correctSentence = filteredSentences[i];
-      }
-    }
+    const maxScore = Math.max(...sentenceScores);
+    const mostNaturalIndex = sentenceScores.indexOf(maxScore);
+    const correctSentence = filteredSentences[mostNaturalIndex];
 
     this.logger.log(`Original sentences: ${sentences.join(', ')}`);
     this.logger.log(`Filtered sentences: ${filteredSentences.join(', ')}`);
+    this.logger.log(`Sentence scores: ${sentenceScores.join(', ')}`);
     this.logger.log(`Correct sentence: ${correctSentence}`);
     this.logger.log(`Correct index: ${mostNaturalIndex}`);
     this.logger.log(`Max score: ${maxScore}`);
 
     return {
       correctSentence: correctSentence || sentences[0],
-      correctIndex: mostNaturalIndex !== -1 ? mostNaturalIndex : 0
+      correctIndex: sentences.indexOf(correctSentence),
+      sentenceScores
     };
   }
 
   private isValidSentence(sentence: string): boolean {
-    // '올바른 문장을 선택해 주세요' 제외
     if (sentence.includes('올바른 문장을 선택해 주세요')) {
       return false;
     }
-
-    // 숫자만 있는 문장 제외
     if (/^\d+$/.test(sentence)) {
       return false;
     }
-
-    // 영어만 있는 문장 제외
     if (/^[a-zA-Z\s]+$/.test(sentence)) {
       return false;
     }
-
-    // 한글이 포함된 문장만 유효하다고 판단
     return /[가-힣]/.test(sentence);
   }
 
-  private async evaluateSentenceWithCache(sentence: string): Promise<EvaluationResult> {
-    const cachedResult = this.cache.get(sentence);
-    if (cachedResult && Date.now() - cachedResult.timestamp < this.CACHE_TTL) {
-      this.logger.log(`Cache hit for sentence: ${sentence}`);
-      return cachedResult.result;
-    }
-
-    const result = await this.evaluateSentence(sentence);
-    this.cache.set(sentence, { result, timestamp: Date.now() });
-    return result;
+  private async evaluateSentences(sentences: string[]): Promise<EvaluationResult[]> {
+    const chunkedSentences = chunk(sentences, this.CHUNK_SIZE);
+    const results = await Promise.all(
+      chunkedSentences.map((chunkOfSentences) => this.processChunk(chunkOfSentences))
+    );
+    return results.flat();
   }
 
-  async evaluateSentence(sentence: string): Promise<EvaluationResult> {
+  private async processChunk(sentences: string[]): Promise<EvaluationResult[]> {
+    return Promise.all(sentences.map((sentence) => this.evaluateSentence(sentence)));
+  }
+
+  public async evaluateSentence(sentence: string): Promise<EvaluationResult> {
     try {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-3.5-turbo",
+          model: "gpt-4",
           messages: [
             {
               role: "system",
@@ -113,7 +96,10 @@ export class GrammarService {
 
               각 질문에 대한 설명은 필요 하지 않고, 마지막으로 점수를 알려주세요.`
             }
-          ]
+          ],
+          temperature: 0.3,
+          max_tokens: 200,
+          top_p: 0.95,
         },
         {
           headers: {
@@ -138,17 +124,12 @@ export class GrammarService {
   }
 
   private extractScoreFromResponse(response: string): number {
-    const lines = response.split('\n');
-    const scoreLine = lines.find(line => line.includes('전체 점수:') || line.includes('종합 평가:'));
-    if (scoreLine) {
-      const scoreMatch = scoreLine.match(/(\d+(\.\d+)?)/);
-      return scoreMatch ? parseFloat(scoreMatch[1]) : 0;
-    }
-    return 0;
+    const scoreMatch = response.match(/(\d+(\.\d+)?)\s*점/);
+    return scoreMatch ? parseFloat(scoreMatch[1]) : 0;
   }
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
-    const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
+    const evaluations = await this.evaluateSentences(sentences);
 
     let maxScore = -1;
     let bestIndex = 0;
@@ -167,7 +148,7 @@ export class GrammarService {
   }
 
   async findMostNaturalSentenceIndex(sentences: string[]): Promise<number> {
-    const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
+    const evaluations = await this.evaluateSentences(sentences);
 
     let maxScore = -1;
     let bestIndex = 0;
