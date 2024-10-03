@@ -9,12 +9,10 @@ import { InjectQueue } from '@nestjs/bull'
 @Controller('image-processing')
 export class ImageProcessingController {
     private readonly logger = new Logger(ImageProcessingController.name);
-    private results: Map<string, any> = new Map();
 
     constructor(
         private readonly visionService: VisionService,
         private readonly grammarService: GrammarService,
-        @InjectQueue('image-processing') private readonly imageProcessingQueue: Queue
     ) { }
 
     @Post('analyze')
@@ -26,15 +24,14 @@ export class ImageProcessingController {
       }
     
       try {
-        const { sentences, boundingBoxes } = await this.visionService.detectTextInImage(file.buffer);
-        const { correctSentence, correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+        const { sentences } = await this.visionService.detectTextInImage(file.buffer);
+        const firstSentence = sentences[0] || '';
+        const result = await this.grammarService.evaluateSentence(firstSentence);
   
         return {
-          sentences,
-          boundingBoxes,
-          correctSentence,
-          correctIndex: parseInt(correctIndex.toString()), // 정수로 변환
-          sentenceScores
+          sentence: firstSentence,
+          score: result.score,
+          feedback: result.feedback
         };
       } catch (error) {
         this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
@@ -42,20 +39,4 @@ export class ImageProcessingController {
       }
     }
 
-    @Get('result/:jobId')
-    async getAnalysisResult(@Param('jobId') jobId: string) {
-        const result = await this.getStoredResult(jobId);
-        if (!result) {
-            throw new NotFoundException('Result not ready');
-        }
-        return result;
-    }
-
-    private async storeResult(jobId: string, result: any): Promise<void> {
-        this.results.set(jobId, result);
-    }
-
-    private async getStoredResult(jobId: string): Promise<any> {
-        return this.results.get(jobId);
-    }
 }
