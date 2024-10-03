@@ -26,7 +26,7 @@ export class GrammarService {
 
   async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
     const filteredSentences = sentences.filter(this.isValidSentence);
-    
+
     let maxScore = -1;
     let mostNaturalIndex = -1;
     let correctSentence = '';
@@ -57,17 +57,17 @@ export class GrammarService {
     if (sentence.includes('올바른 문장을 선택해 주세요')) {
       return false;
     }
-    
+
     // 숫자만 있는 문장 제외
     if (/^\d+$/.test(sentence)) {
       return false;
     }
-    
+
     // 영어만 있는 문장 제외
     if (/^[a-zA-Z\s]+$/.test(sentence)) {
       return false;
     }
-    
+
     // 한글이 포함된 문장만 유효하다고 판단
     return /[가-힣]/.test(sentence);
   }
@@ -99,12 +99,17 @@ export class GrammarService {
               role: "user",
               content: `다음 문장을 분석해주세요: "${sentence}"
 
-              1. 모든 단어가 유효하고 국립국어원의 표준국어대사전에 존재하는 단어인가요 (최대 2점)?
-              2. 문장 구조(주어, 목적어, 서술어 등)가 올바르고, 문장이 해석하기에 모호한 부분이 있지는 않나요? (최대 2점)?
-              3. 조사가 올바르게 쓰이고 어순과 형태가 자연스럽나요 (최대 2점) ??
-              4. 전체적으로 의미가 명확하고 자연스러운가요 (최대 2점)?
-              5. 도치법을 사용 하지 않고 정석적인 문장의 어순을 가지고 있나요? (최대 2점)?
-              6. 1부터 10까지의 척도로 이 문장의 정확성과 자연스러움을 평가한다면 몇 점을 주시겠습니까?
+              1. 모든 단어가 유효하고 국립국어원의 표준국어대사전에 존재하는 단어인가요?
+              2. 문장의 의미가 명확하게 전달되는지, 해석에 혼동이나 모호함이 있지는 않나요?
+              3. 조사가 올바르게 쓰이고 어순과 형태가 자연스럽나요?
+              4. 전체적으로 의미가 명확하고 자연스러운가요?
+              5. 도치법을 사용 하지 않고 정석적인 문장의 어순을 가지고 있나요?
+              6. 다음 항목들에 대해 각각 1부터 10까지의 척도로 평가해 주세요:
+                a. 문법적 정확성: 문장의 주어, 목적어, 서술어 등 문법 구조가 정확하게 사용되었는지 평가해 주세요.
+                b. 의미의 명확성: 문장이 해석할 때 혼동 없이 명확하게 의미가 전달되는지 평가해 주세요.
+                c. 문장의 자연스러움: 문장이 자연스럽고, 일상적으로 쓰일 수 있는지 평가해 주세요.
+                d. 어휘 선택의 적절성: 사용된 단어들이 문맥에 적합하며, 부자연스럽거나 어색한 단어가 없는지 평가해 주세요.
+                e. 전체 점수: 이 문장을 종합적으로 평가했을 때, 1부터 10까지의 척도로 최종 점수를 매겨 주세요.
 
               각 질문에 대한 설명은 필요 하지 않고, 마지막으로 점수를 알려주세요.`
             }
@@ -124,7 +129,7 @@ export class GrammarService {
       this.logger.log(`Sentence: ${sentence}`);
       this.logger.log(`AI Response: ${aiResponse}`);
       this.logger.log(`Extracted Score: ${score}`);
-      
+
       return { score, feedback: aiResponse };
     } catch (error) {
       this.logger.error(`Failed to evaluate sentence: ${error.message}`, error.stack);
@@ -139,10 +144,10 @@ export class GrammarService {
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
     const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
-    
+
     let maxScore = -1;
     let bestIndex = 0;
-    
+
     for (let i = 0; i < evaluations.length; i++) {
       if (evaluations[i].score > maxScore) {
         maxScore = evaluations[i].score;
@@ -158,10 +163,10 @@ export class GrammarService {
 
   async findMostNaturalSentenceIndex(sentences: string[]): Promise<number> {
     const evaluations: EvaluationResult[] = await Promise.all(sentences.map(this.evaluateSentenceWithCache.bind(this)));
-    
+
     let maxScore = -1;
     let bestIndex = 0;
-    
+
     for (let i = 0; i < evaluations.length; i++) {
       if (evaluations[i].score > maxScore) {
         maxScore = evaluations[i].score;
