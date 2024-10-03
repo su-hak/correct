@@ -69,6 +69,14 @@ export class UsersService {
   }
 
   async deleteAllUsers(): Promise<void> {
-    await this.usersRepository.query('TRUNCATE TABLE users');
+    // 빈 ID를 가진 사용자 삭제
+    await this.usersRepository.query('DELETE FROM users WHERE id = ""');
+    
+    // 나머지 모든 사용자 삭제
+    await this.usersRepository.query('DELETE FROM users');
+    
+    // 자동 증가 값 리셋 (필요한 경우)
+    await this.usersRepository.query('ALTER TABLE users AUTO_INCREMENT = 1');
   }
+
 }
