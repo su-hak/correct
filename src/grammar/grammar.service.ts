@@ -24,31 +24,35 @@ export class GrammarService {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
   }
 
-  async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
+  async findMostNaturalSentence(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number, sentenceScores: number[] }> {
     const filteredSentences = sentences.filter(this.isValidSentence);
+    const evaluations = await Promise.all(filteredSentences.map(sentence => this.evaluateSentenceWithCache(sentence)));
     
     let maxScore = -1;
     let mostNaturalIndex = -1;
-    let correctSentence = '';
+    const sentenceScores = evaluations.map(evals => evals.score);
 
-    for (let i = 0; i < filteredSentences.length; i++) {
-      const result = await this.evaluateSentenceWithCache(filteredSentences[i]);
-      if (result.score > maxScore) {
-        maxScore = result.score;
-        mostNaturalIndex = sentences.indexOf(filteredSentences[i]);  // 원래 배열에서의 인덱스를 찾습니다
-        correctSentence = filteredSentences[i];
+    sentenceScores.forEach((score, index) => {
+      if (score > maxScore) {
+        maxScore = score;
+        mostNaturalIndex = index;
       }
-    }
+    });
 
-    // 로깅 추가
+    const correctSentence = filteredSentences[mostNaturalIndex];
+    const correctIndex = sentences.indexOf(correctSentence);
+
     this.logger.log(`Original sentences: ${sentences.join(', ')}`);
     this.logger.log(`Filtered sentences: ${filteredSentences.join(', ')}`);
+    this.logger.log(`Sentence scores: ${sentenceScores.join(', ')}`);
     this.logger.log(`Correct sentence: ${correctSentence}`);
-    this.logger.log(`Correct index: ${mostNaturalIndex}`);
+    this.logger.log(`Correct index: ${correctIndex}`);
+    this.logger.log(`Max score: ${maxScore}`);
 
     return {
-      correctSentence: correctSentence || sentences[0],  // 유효한 문장이 없을 경우 첫 번째 문장 반환
-      correctIndex: mostNaturalIndex !== -1 ? mostNaturalIndex : 0
+      correctSentence: correctSentence || sentences[0],
+      correctIndex: correctIndex !== -1 ? correctIndex : 0,
+      sentenceScores
     };
   }
 
