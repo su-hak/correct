@@ -72,11 +72,11 @@ export class UsersController {
         return this.usersService.remove(id);
     }
 
-    @Delete('delete-all')
+    @Delete('force-delete-all')
     @HttpCode(HttpStatus.NO_CONTENT)
-    @ApiOperation({ summary: '모든 사용자 삭제' })
-    @ApiResponse({ status: 204, description: '모든 사용자가 성공적으로 삭제됨' })
-    async deleteAllUsers(): Promise<void> {
-      await this.usersService.deleteAllUsers();
+    @ApiOperation({ summary: '모든 사용자 강제 삭제' })
+    @ApiResponse({ status: 204, description: '모든 사용자가 성공적으로 강제 삭제됨' })
+    async forceDeleteAllUsers(): Promise<void> {
+      await this.usersService.deleteAllUsersForce();
     }
 }

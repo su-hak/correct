@@ -68,15 +68,15 @@ export class UsersService {
     await this.usersRepository.delete(id);
   }
 
-  async deleteAllUsers(): Promise<void> {
-    // 빈 ID를 가진 사용자 삭제
-    await this.usersRepository.query('DELETE FROM users WHERE id = ""');
-    
-    // 나머지 모든 사용자 삭제
-    await this.usersRepository.query('DELETE FROM users');
-    
-    // 자동 증가 값 리셋 (필요한 경우)
-    await this.usersRepository.query('ALTER TABLE users AUTO_INCREMENT = 1');
+  async deleteAllUsersForce(): Promise<void> {
+    // 모든 레코드를 조건 없이 삭제
+    await this.usersRepository.createQueryBuilder()
+      .delete()
+      .from(User)
+      .execute();
+  
+    // 테이블을 비우고 AUTO_INCREMENT를 리셋 (MySQL/MariaDB용)
+    await this.usersRepository.query('TRUNCATE TABLE users');
   }
 
 }
