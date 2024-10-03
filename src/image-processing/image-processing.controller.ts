@@ -52,7 +52,7 @@ export class ImageProcessingController {
                 boundingBoxes,
                 correctSentence,
                 correctIndex: parseInt(correctIndex.toString()),
-                sentenceScores: sentenceScores.map(score => parseFloat(score.toFixed(2)))
+                sentenceScores: sentenceScores.map(score => parseFloat(score.toFixed(0)))
             };
 
             await this.storeResult(jobId, result);
