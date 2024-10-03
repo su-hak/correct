@@ -34,6 +34,7 @@ import { CacheModule } from '@nestjs/cache-manager';
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: false,
             logging: true,
+            logger: 'advanced-console',
           };
         } else {
           return {
@@ -46,6 +47,7 @@ import { CacheModule } from '@nestjs/cache-manager';
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: configService.get('DB_SYNC') === 'true',
             logging: true,
+            logger: 'advanced-console',
           };
         }
       },

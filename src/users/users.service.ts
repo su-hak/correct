@@ -24,20 +24,21 @@ export class UsersService {
   async login(loginUserDto: LoginUserDto, deviceId: string): Promise<User> {
     const { id } = loginUserDto;
     const user = await this.usersRepository.findOne({ where: { id } });
-    
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    
+
     if (new Date() > user.expiryDate) {
       throw new UnauthorizedException('Token has expired');
     }
 
+    console.log('Before update:', user);
     if (user.deviceId !== deviceId) {
       user.deviceId = deviceId;
       await this.usersRepository.save(user);
+      console.log('After update:', user);
     }
-    
     return user;
   }
 
@@ -70,8 +71,9 @@ export class UsersService {
 
   async save(user: User): Promise<User> {
     console.log('Saving user:', user);
-  const savedUser = await this.usersRepository.save(user);
-  console.log('Saved user:', savedUser);
-  return savedUser;
+    const savedUser = await this.usersRepository.save(user);
+    console.log('Saved user:', savedUser);
+    console.log('SQL Query:', this.usersRepository.createQueryBuilder().updateEntity(user).getQuery());
+    return savedUser;
   }
 }

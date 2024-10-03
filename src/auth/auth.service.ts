@@ -13,6 +13,7 @@ export class AuthService {
   ) {}
 
   async login(id: string, deviceId: string): Promise<any> {
+    console.log('Login attempt with:', { id, deviceId });
     const user = await this.validateUser(id);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -21,6 +22,9 @@ export class AuthService {
     // deviceId 업데이트
     user.deviceId = deviceId;
     await this.usersService.save(user);
+
+    const updatedUser = await this.usersService.findOne(id);
+    console.log('User after save:', updatedUser);
 
     const payload = { sub: user.id, deviceId: user.deviceId };
     const token = this.jwtService.sign(payload);
