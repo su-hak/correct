@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginUserDto } from 'src/users/dto/users.dto';
 import { User } from 'src/users/entities/users.entity';
+import { v4 as uuidv4 } from 'uuid';
+
 
 @Injectable()
 export class AuthService {
@@ -12,27 +14,27 @@ export class AuthService {
     private usersService: UsersService
   ) {}
 
-  async login(id: string, deviceId: string): Promise<any> {
-    console.log('Login attempt in AuthService:', { id, deviceId });
+  async login(id: string, deviceId?: string): Promise<any> {
     const user = await this.validateUser(id);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // 클라이언트가 deviceId를 제공하지 않으면 서버에서 생성
+    const newDeviceId = deviceId || uuidv4();
+
     // deviceId 업데이트
-    user.deviceId = deviceId;
+    user.deviceId = newDeviceId;
     await this.usersService.save(user);
 
-    const updatedUser = await this.usersService.findOne(id);
-    console.log('User after save:', updatedUser);
-
-    const payload = { sub: user.id, deviceId: user.deviceId };
+    const payload = { sub: user.id, deviceId: newDeviceId };
     const token = this.jwtService.sign(payload);
     
     return {
       token: token,
       expiryDate: user.expiryDate,
-      id: user.id
+      id: user.id,
+      deviceId: newDeviceId
     };
   }
 
