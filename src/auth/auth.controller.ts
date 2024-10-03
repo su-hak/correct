@@ -1,4 +1,4 @@
-import { Controller, Post, Body, SetMetadata } from '@nestjs/common';
+import { Controller, Post, Body, SetMetadata, Headers, UnauthorizedException, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginUserDto } from 'src/users/dto/users.dto';
 
@@ -11,7 +11,17 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  async login(@Body('id') loginUserDto: LoginUserDto, deviceId) {
+  async login(@Body() loginUserDto: LoginUserDto, @Headers('Device-ID') deviceId: string) {
     return this.authService.login(loginUserDto, deviceId);
+  }
+
+  @Get('validate')
+  async validateToken(@Headers('Authorization') authHeader: string, @Headers('Device-ID') deviceId: string) {
+    const token = authHeader.split(' ')[1]; // Bearer 토큰에서 실제 토큰 추출
+    const isValid = await this.authService.validateToken(token, deviceId);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid token or device');
+    }
+    return { valid: true };
   }
 }

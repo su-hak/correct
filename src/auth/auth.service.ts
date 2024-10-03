@@ -20,18 +20,18 @@ export class AuthService {
     };
   }
 
-  async validateToken(token: string, deviceId: string): Promise<any> {
+  async validateToken(token: string, deviceId: string): Promise<boolean> {
     try {
       const payload = this.jwtService.verify(token);
       const user = await this.usersService.findOne(payload.sub);
       
       if (!user || user.deviceId !== deviceId || new Date() > user.expiryDate) {
-        return null; // 유효하지 않은 토큰이나 사용자
+        return false;
       }
       
-      return user;
+      return true;
     } catch (error) {
-      return null; // 토큰 검증 실패
+      return false;
     }
   }
 }
