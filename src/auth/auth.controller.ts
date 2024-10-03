@@ -1,18 +1,38 @@
 import { Controller, Post, Body, SetMetadata, Headers, UnauthorizedException, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginUserDto } from 'src/users/dto/users.dto';
+import { UsersService } from 'src/users/users.service';
+import { JwtService } from '@nestjs/jwt';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private usersService: UsersService,
+    private jwtService: JwtService
+  ) { }
 
-  @Public()
   @Post('login')
-  async login(@Body() loginUserDto: LoginUserDto, @Headers('Device-ID') deviceId: string) {
-    return this.authService.login(loginUserDto, deviceId);
+  async login(@Body() loginUserDto: { id: string; deviceId: string }) {
+    const user = await this.authService.validateUser(loginUserDto.id);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // deviceId 업데이트
+    user.deviceId = loginUserDto.deviceId;
+    await this.usersService.save(user);
+
+    const payload = { sub: user.id, deviceId: user.deviceId };
+    const token = this.jwtService.sign(payload);
+    return {
+      access_token: token,
+      expiryDate: user.expiryDate,
+      id: user.id
+    };
   }
 
   @Get('validate')
