@@ -52,6 +52,8 @@ export class GrammarService {
     // '올바른 문장을 선택해 주세요' 제외
     if (sentence.includes('올바른 문장을 선택해 주세요')) {
       return false;
+    } else if (sentence.includes('로그인') || sentence.includes('로그아웃')) {
+      return false;
     }
     
     // 숫자만 있는 문장 제외
@@ -121,11 +123,6 @@ export class GrammarService {
       this.logger.error(`Failed to evaluate sentence: ${error.message}`, error.stack);
       return { score: 0, feedback: "평가 중 오류 발생" };
     }
-  }
-
-  private extractScoreFromResponse(response: string): number {
-    const scoreMatch = response.match(/(\d+)(?=\s*점)/);
-    return scoreMatch ? parseInt(scoreMatch[1], 10) : 0;
   }
 
   async checkGrammar(sentences: string[]): Promise<{ correctSentence: string, correctIndex: number }> {
