@@ -1,36 +1,24 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { lastValueFrom } from 'rxjs';
 
-interface CacheEntry {
-  result: PetStats;
-  timestamp: number;
-}
 
 @Injectable()
 export class PetStatService {
   private readonly logger = new Logger(PetStatService.name);
   private readonly openaiApiKey: string;
-  private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
   constructor(
     private configService: ConfigService,
-    private readonly httpService: HttpService
+    private httpService: HttpService
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
   }
 
   async extractPetStats(imageBase64: string): Promise<PetStats> {
-    const cachedResult = this.cache.get(imageBase64);
-    if (cachedResult && Date.now() - cachedResult.timestamp < this.CACHE_TTL) {
-      this.logger.log(`Cache hit for image hash: ${this.hashCode(imageBase64)}`);
-      return cachedResult.result;
-    }
-
     try {
-      const response = await axios.post(
+      const response = await lastValueFrom(this.httpService.post(
         'https://api.openai.com/v1/chat/completions',
         {
           model: "gpt-4o-mini",
@@ -57,14 +45,13 @@ export class PetStatService {
             'Content-Type': 'application/json'
           }
         }
-      );
+      ));
 
       const content = response.data.choices[0].message.content.trim();
       const stats = this.parseStats(content);
 
       this.logger.log(`Extracted stats: ${JSON.stringify(stats)}`);
       
-      this.cache.set(imageBase64, { result: stats, timestamp: Date.now() });
       return stats;
     } catch (error) {
       this.logger.error(`Failed to extract pet stats: ${error.message}`, error.stack);
@@ -82,15 +69,5 @@ export class PetStatService {
       stats.내 = parseInt(numbers[3], 10);
     }
     return stats;
-  }
-
-  private hashCode(str: string): number {
-    let hash = 0;
-    for (let i = 0, len = str.length; i < len; i++) {
-      let chr = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + chr;
-      hash |= 0; // Convert to 32bit integer
-    }
-    return hash;
   }
 }
