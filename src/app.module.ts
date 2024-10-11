@@ -9,6 +9,7 @@ import { generateSecret } from './utils/secret-generator';
 import { BullModule } from '@nestjs/bull';
 import { ImageProcessingModule } from './image-processing/image-processing.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { PetStatModule } from './pet-stat/pet-stat.module';
 
 @Module({
   imports: [
@@ -81,7 +82,8 @@ import { CacheModule } from '@nestjs/cache-manager';
     ImageProcessingModule,
     CacheModule.register({
       isGlobal: true,
-    })
+    }),
+    PetStatModule
   ],
 })
 export class AppModule {}
