@@ -19,4 +19,10 @@ export class User {
 
   @Column({ nullable: true })
   deviceId: string;
+
+  @Column({ default: false })
+  isLoggedIn: boolean;
+
+  @Column({ nullable: true })
+  lastHeartbeat: Date;
 }

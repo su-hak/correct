@@ -42,11 +42,6 @@ export class LoginUserDto {
     @IsNotEmpty()
     @ApiProperty({ example: 'john_doe' })
     id: string;
-    
-    @IsString()
-    @IsOptional()
-    @ApiProperty({ required: false, example: 'd25h5t21-bbq6-404c-a126-324d377db54d' })
-    deviceId?: string;
 }
 
 export class RefreshTokenDto {

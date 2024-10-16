@@ -17,7 +17,7 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() loginUserDto: LoginUserDto) {
-    return this.authService.login(loginUserDto.id, loginUserDto.deviceId);
+    return this.authService.login(loginUserDto.id);
   }
 
   @Get('validate')

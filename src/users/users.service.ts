@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from './entities/users.entity';
 import { CreateUserDto, LoginUserDto } from './dto/users.dto';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class UsersService {
@@ -31,32 +32,63 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async login(loginUserDto: LoginUserDto, deviceId: string): Promise<User> {
+  async login(loginUserDto: LoginUserDto): Promise<User> {
     const { id } = loginUserDto;
-    console.log('Login attempt in UsersService:', { id, deviceId });
-
+    console.log('Login attempt in UsersService:', { id });
+  
     const user = await this.usersRepository.findOne({ where: { id } });
-
+  
     if (!user) {
       throw new NotFoundException('User not found');
     }
-
+    if (user.isLoggedIn) {
+      throw new ConflictException('User is already logged in');
+    }
     if (new Date() > user.expiryDate) {
       throw new UnauthorizedException('Token has expired');
     }
-
-    console.log('Current user deviceId:', user.deviceId);
-    console.log('Received deviceId:', deviceId);
-
-    if (deviceId && user.deviceId !== deviceId) {
-      user.deviceId = deviceId;
-      const updatedUser = await this.usersRepository.save(user);
-      console.log('Updated user:', JSON.stringify(updatedUser, null, 2));
-    } else {
-      console.log('DeviceId unchanged');
-    }
+  
+    // 로그인 상태 업데이트
+    user.isLoggedIn = true;
+    user.lastHeartbeat = new Date();
     
-    return user;
+    const updatedUser = await this.usersRepository.save(user);
+    console.log('User logged in:', JSON.stringify(updatedUser, null, 2));
+    
+    return updatedUser;
+  }
+
+  async logout(id: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.isLoggedIn = false;
+    await this.usersRepository.save(user);
+  }
+
+  async heartbeat(id: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.lastHeartbeat = new Date();
+    await this.usersRepository.save(user);
+  }
+
+  @Cron('* * * * *')  // 매 분마다 실행
+  async checkInactiveUsers() {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const inactiveUsers = await this.usersRepository.find({
+      where: {
+        isLoggedIn: true,
+        lastHeartbeat: LessThan(fiveMinutesAgo),
+      },
+    });
+    for (const user of inactiveUsers) {
+      user.isLoggedIn = false;
+      await this.usersRepository.save(user);
+    }
   }
 
   async updateToken(id: string, expiryDate: number): Promise<User> {

@@ -11,38 +11,38 @@ export class UsersController {
     constructor(private readonly usersService: UsersService) { }
 
     @Post()
-  @ApiOperation({ summary: '회원가입' })
-  @ApiBody({ type: CreateUserDto })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'The user has been successfully created.', 
-    type: User,
-    schema: {
-      example: {
-        id: 'john_doe',
-        token: 'a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6',
-        expiryDate: '2023-05-15T14:30:00.000Z'
-      }
+    @ApiOperation({ summary: '회원가입' })
+    @ApiBody({ type: CreateUserDto })
+    @ApiResponse({
+        status: 201,
+        description: 'The user has been successfully created.',
+        type: User,
+        schema: {
+            example: {
+                id: 'john_doe',
+                token: 'a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6',
+                expiryDate: '2023-05-15T14:30:00.000Z'
+            }
+        }
+    })
+    @ApiResponse({ status: 400, description: 'Bad Request.' })
+    async create(@Body() createUserDto: CreateUserDto) {
+        const user = await this.usersService.create(createUserDto);
+        return {
+            id: user.id,
+            token: user.token,
+            expiryDate: user.expiryDate
+        };
     }
-  })
-  @ApiResponse({ status: 400, description: 'Bad Request.' })
-  async create(@Body() createUserDto: CreateUserDto) {
-    const user = await this.usersService.create(createUserDto);
-    return {
-      id: user.id,
-      token: user.token,
-      expiryDate: user.expiryDate
-    };
-  }
 
     @Public()
     @Post('login')
     @ApiOperation({ summary: '로그인' })
     @ApiResponse({ status: 200, description: 'Login successful.', type: User })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async login(@Body() loginUserDto: LoginUserDto, deviceId) {
+    async login(@Body() loginUserDto: LoginUserDto) {
         try {
-            const user = await this.usersService.login(loginUserDto, deviceId);
+            const user = await this.usersService.login(loginUserDto);
             const response = {
                 token: user.token,
                 expiryDate: user.expiryDate,
@@ -56,6 +56,18 @@ export class UsersController {
             }
             throw error;
         }
+    }
+
+    @Post('logout')
+    async logout(@Body('id') id: string) {
+        await this.usersService.logout(id);
+        return { message: 'Logged out successfully' };
+    }
+
+    @Post('heartbeat')
+    async heartbeat(@Body('id') id: string) {
+        await this.usersService.heartbeat(id);
+        return { message: 'Heartbeat received' };
     }
 
     @Post(':id/refresh-token')
