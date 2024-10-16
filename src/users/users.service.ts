@@ -13,11 +13,21 @@ export class UsersService {
   ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
+    const { expiryDuration, expiryUnit } = createUserDto;
+    let expiryMs: number;
+
+    if (expiryUnit === 'hours') {
+      expiryMs = expiryDuration * 60 * 60 * 1000;
+    } else {
+      expiryMs = expiryDuration * 24 * 60 * 60 * 1000;
+    }
+
     const user = this.usersRepository.create({
       ...createUserDto,
       token: uuidv4(),
-      expiryDate: new Date(Date.now() + createUserDto.expiryDate * 24 * 60 * 60 * 1000)
+      expiryDate: new Date(Date.now() + expiryMs)
     });
+
     return this.usersRepository.save(user);
   }
 
