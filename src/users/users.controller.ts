@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CreateUserDto, LoginUserDto } from './dto/users.dto';
+import { CreateUserDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -61,12 +61,20 @@ export class UsersController {
     @Post(':id/refresh-token')
     @ApiOperation({ summary: '토큰 재생성' })
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
     async refreshToken(
         @Param('id') id: string,
-        @Body('expiryDate') expiryDate: number
+        @Body() refreshTokenDto: RefreshTokenDto
     ) {
-        const user = await this.usersService.updateToken(id, expiryDate);
-        return { token: user.token, expiryDate: user.expiryDate };
+        try {
+            const user = await this.usersService.updateToken(id, refreshTokenDto.expiryDate);
+            return { token: user.token, expiryDate: user.expiryDate };
+        } catch (error) {
+            if (error instanceof UnauthorizedException) {
+                throw new HttpException('Unauthorized: Token has expired', HttpStatus.UNAUTHORIZED);
+            }
+            throw error;
+        }
     }
 
     @Get()

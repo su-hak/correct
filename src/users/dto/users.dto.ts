@@ -48,3 +48,16 @@ export class LoginUserDto {
     @ApiProperty({ required: false, example: 'd25h5t21-bbq6-404c-a126-324d377db54d' })
     deviceId?: string;
 }
+
+export class RefreshTokenDto {
+  @ApiProperty({ 
+    example: 30, 
+    description: '토큰 유효 기간 (일 단위)',
+    minimum: 1,
+    maximum: 365  // 최대 1년
+  })
+  @IsNumber()
+  @Min(1)
+  @Max(365)
+  expiryDate: number;
+}

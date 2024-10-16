@@ -64,8 +64,11 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    if (user.expiryDate < new Date()) {
+      throw new UnauthorizedException('Token has expired');
+    }
     user.token = uuidv4();
-    user.expiryDate = new Date(Date.now() + expiryDate * 24 * 60 * 60 * 1000); // 30 days from now
+    user.expiryDate = new Date(Date.now() + expiryDate * 24 * 60 * 60 * 1000);
     user.deviceId = null;
     return this.usersRepository.save(user);
   }
