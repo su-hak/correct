@@ -96,12 +96,12 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.expiryDate && user.expiryDate < new Date()) {
-      throw new UnauthorizedException('Token has expired');
-    }
+    
+    // 토큰 만료 여부와 관계없이 새 토큰 발급
     user.token = uuidv4();
     user.expiryDate = this.calculateExpiryDate(refreshTokenDto.expiryDuration, refreshTokenDto.expiryUnit);
     user.deviceId = null;
+    
     return this.usersRepository.save(user);
   }
 

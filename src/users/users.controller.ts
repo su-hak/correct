@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
 import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
@@ -74,19 +74,20 @@ export class UsersController {
     @ApiOperation({ summary: '토큰 재생성' })
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiResponse({ status: 404, description: 'User not found' })
     async refreshToken(
-      @Param('id') id: string,
-      @Body() refreshTokenDto: RefreshTokenDto
+        @Param('id') id: string,
+        @Body() refreshTokenDto: RefreshTokenDto
     ) {
-      try {
-        const user = await this.usersService.updateToken(id, refreshTokenDto);
-        return { token: user.token, expiryDate: user.expiryDate };
-      } catch (error) {
-        if (error instanceof HttpException) {
-          throw error;
+        try {
+            const user = await this.usersService.updateToken(id, refreshTokenDto);
+            return { token: user.token, expiryDate: user.expiryDate };
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+            }
+            throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
-      }
     }
   
     @Post(':id/delete-token-expiration')
