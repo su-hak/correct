@@ -106,12 +106,14 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async deleteTokenExpiration(id: string): Promise<User> {
+  async invalidateToken(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    user.token = null;
     user.expiryDate = null;
+    user.isLoggedIn = false;
     return this.usersRepository.save(user);
   }
 

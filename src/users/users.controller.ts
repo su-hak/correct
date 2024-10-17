@@ -144,19 +144,13 @@ export class UsersController {
         }
     }
 
-    @Post(':id/delete-token-expiration')
-    @ApiOperation({ summary: '토큰 만료 삭제' })
-    @ApiResponse({ status: 200, description: 'Token expiration deleted successfully.', type: User })
+    @Post(':id/invalidate-token')
+    @ApiOperation({ summary: '토큰 무효화 및 로그아웃' })
+    @ApiResponse({ status: 200, description: 'Token invalidated successfully.', type: User })
     @ApiResponse({ status: 404, description: 'User not found' })
-    async deleteTokenExpiration(
-        @Param('id') id: string,
-        @Body() deleteTokenExpirationDto: DeleteTokenExpirationDto
-    ) {
-        if (deleteTokenExpirationDto.deleteExpiration) {
-            const user = await this.usersService.deleteTokenExpiration(id);
-            return { message: 'Token expiration deleted successfully', user };
-        }
-        throw new HttpException('Invalid request', HttpStatus.BAD_REQUEST);
+    async invalidateToken(@Param('id') id: string) {
+        const user = await this.usersService.invalidateToken(id);
+        return { message: 'Token invalidated and user logged out successfully', user };
     }
 
     @Get()
