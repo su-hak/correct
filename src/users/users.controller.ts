@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CheckTokenDto, CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CheckTokenDto, CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, InvalidateTokenDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -41,6 +41,7 @@ export class UsersController {
     @ApiOperation({ summary: '로그인' })
     @ApiResponse({ status: 200, description: 'Login successful.', type: User })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiResponse({ status: 404, description: 'User not found' })
     async login(@Body() loginUserDto: LoginUserDto) {
         try {
             const user = await this.usersService.login(loginUserDto);
@@ -146,11 +147,24 @@ export class UsersController {
 
     @Post(':id/invalidate-token')
     @ApiOperation({ summary: '토큰 무효화 및 로그아웃' })
-    @ApiResponse({ status: 200, description: 'Token invalidated successfully.', type: User })
+    @ApiResponse({ status: 200, description: 'Token invalidated successfully' })
     @ApiResponse({ status: 404, description: 'User not found' })
-    async invalidateToken(@Param('id') id: string) {
-        const user = await this.usersService.invalidateToken(id);
-        return { message: 'Token invalidated and user logged out successfully', user };
+    async invalidateToken(
+        @Param('id') id: string,
+        @Body() invalidateTokenDto: InvalidateTokenDto
+    ) {
+        try {
+            if (!invalidateTokenDto.confirm) {
+                throw new BadRequestException('Confirmation is required');
+            }
+            const user = await this.usersService.invalidateToken(id);
+            return { message: 'Token invalidated and user logged out successfully' };
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw new NotFoundException('User not found');
+            }
+            throw error;
+        }
     }
 
     @Get()

@@ -99,3 +99,10 @@ export class HeartbeatDto {
   @IsNotEmpty()
   id: string;
 }
+
+export class InvalidateTokenDto {
+  @ApiProperty({ example: true, description: 'Flag to confirm token invalidation' })
+  @IsBoolean()
+  @IsNotEmpty()
+  confirm: boolean;
+}
