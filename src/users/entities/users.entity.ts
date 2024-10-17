@@ -14,7 +14,7 @@ export class User {
   @Column()
   contact: string;
 
-  @Column()
+  @Column({ nullable: true })
   expiryDate: Date;
 
   @Column({ nullable: true })

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CreateUserDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -75,18 +75,33 @@ export class UsersController {
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     async refreshToken(
-        @Param('id') id: string,
-        @Body() refreshTokenDto: RefreshTokenDto
+      @Param('id') id: string,
+      @Body() refreshTokenDto: RefreshTokenDto
     ) {
-        try {
-            const user = await this.usersService.updateToken(id, refreshTokenDto.expiryDate);
-            return { token: user.token, expiryDate: user.expiryDate };
-        } catch (error) {
-            if (error instanceof UnauthorizedException) {
-                throw new HttpException('Unauthorized: Token has expired', HttpStatus.UNAUTHORIZED);
-            }
-            throw error;
+      try {
+        const user = await this.usersService.updateToken(id, refreshTokenDto);
+        return { token: user.token, expiryDate: user.expiryDate };
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
         }
+        throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+    }
+  
+    @Post(':id/delete-token-expiration')
+    @ApiOperation({ summary: '토큰 만료 삭제' })
+    @ApiResponse({ status: 200, description: 'Token expiration deleted successfully.', type: User })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    async deleteTokenExpiration(
+      @Param('id') id: string,
+      @Body() deleteTokenExpirationDto: DeleteTokenExpirationDto
+    ) {
+      if (deleteTokenExpirationDto.deleteExpiration) {
+        const user = await this.usersService.deleteTokenExpiration(id);
+        return { message: 'Token expiration deleted successfully', user };
+      }
+      throw new HttpException('Invalid request', HttpStatus.BAD_REQUEST);
     }
 
     @Get()

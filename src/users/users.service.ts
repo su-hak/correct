@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from './entities/users.entity';
-import { CreateUserDto, LoginUserDto } from './dto/users.dto';
+import { CreateUserDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -91,18 +91,32 @@ export class UsersService {
     }
   }
 
-  async updateToken(id: string, expiryDate: number): Promise<User> {
+  async updateToken(id: string, refreshTokenDto: RefreshTokenDto): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.expiryDate < new Date()) {
+    if (user.expiryDate && user.expiryDate < new Date()) {
       throw new UnauthorizedException('Token has expired');
     }
     user.token = uuidv4();
-    user.expiryDate = new Date(Date.now() + expiryDate * 24 * 60 * 60 * 1000);
+    user.expiryDate = this.calculateExpiryDate(refreshTokenDto.expiryDuration, refreshTokenDto.expiryUnit);
     user.deviceId = null;
     return this.usersRepository.save(user);
+  }
+
+  async deleteTokenExpiration(id: string): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.expiryDate = null;
+    return this.usersRepository.save(user);
+  }
+
+  private calculateExpiryDate(duration: number, unit: 'hours' | 'days'): Date {
+    const multiplier = unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    return new Date(Date.now() + duration * multiplier);
   }
 
   async findOne(id: string): Promise<User> {
