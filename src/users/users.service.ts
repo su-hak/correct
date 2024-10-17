@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from './entities/users.entity';
-import { CreateUserDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CreateUserDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -58,7 +58,8 @@ export class UsersService {
     return updatedUser;
   }
 
-  async logout(id: string): Promise<void> {
+  async logout(logoutUserDto: LogoutUserDto): Promise<void> {
+    const { id } = logoutUserDto;
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');

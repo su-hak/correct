@@ -44,6 +44,13 @@ export class LoginUserDto {
     id: string;
 }
 
+export class LogoutUserDto {
+    @IsString()
+    @IsNotEmpty()
+    @ApiProperty({ example: 'john_doe' })
+    id: string;
+}
+
 export class RefreshTokenDto {
   @ApiProperty({ 
     example: 30, 
