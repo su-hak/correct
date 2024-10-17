@@ -6,6 +6,7 @@ import * as express from 'express';
 import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
+  process.env.TZ = 'Asia/Seoul';
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');

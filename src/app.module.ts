@@ -35,6 +35,7 @@ import { CacheModule } from '@nestjs/cache-manager';
             synchronize: false,
             logging: true,
             logger: 'advanced-console',
+            timezone: '+09:00'
           };
         } else {
           return {
@@ -48,6 +49,7 @@ import { CacheModule } from '@nestjs/cache-manager';
             synchronize: configService.get('DB_SYNC') === 'true',
             logging: true,
             logger: 'advanced-console',
+            timezone: '+09:00'
           };
         }
       },
