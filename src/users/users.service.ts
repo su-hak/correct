@@ -111,7 +111,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    user.token = null;
+    user.token = ''; // 빈 문자열로 설정
     user.expiryDate = null;
     user.isLoggedIn = false;
     return this.usersRepository.save(user);

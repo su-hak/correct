@@ -70,13 +70,11 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    async heartbeat(@Body() heartbeatDto: HeartbeatDto, @Req() request: Request) {
+    async heartbeat(@Body() body: { id: string }, @Headers('authorization') authHeader: string) {
         try {
             console.log('Received heartbeat request');
-            console.log('Request body:', heartbeatDto);
-            console.log('All headers:', request.headers);
-
-            const authHeader = request.headers['authorization'];
+            console.log('Request body:', body);
+            console.log('Authorization header:', authHeader);
 
             if (!authHeader) {
                 throw new UnauthorizedException('No authorization header provided');
@@ -90,13 +88,12 @@ export class UsersController {
 
             console.log(`Extracted token: ${token}`);
 
-            const isValid = await this.usersService.checkTokenValidity(heartbeatDto.id, token);
+            const isValid = await this.usersService.checkTokenValidity(body.id, token);
             if (!isValid) {
-                console.log(`Token validation failed for user ${heartbeatDto.id}`);
                 throw new UnauthorizedException('Token is invalid or expired');
             }
 
-            await this.usersService.heartbeat(heartbeatDto.id);
+            await this.usersService.heartbeat(body.id);
             return { message: 'Heartbeat received' };
         } catch (error) {
             console.error(`Error in heartbeat: ${error.message}`);
