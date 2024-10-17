@@ -20,24 +20,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 클라이언트가 deviceId를 제공하지 않으면 서버에서 생성
     const newDeviceId = deviceId || uuidv4();
-
-    // 새로운 토큰 생성
     const newToken = uuidv4();
 
-    // deviceId와 토큰 업데이트
     user.deviceId = newDeviceId;
     user.token = newToken;
     user.isLoggedIn = true;
     await this.usersService.save(user);
 
-    const payload = { sub: user.id, deviceId: newDeviceId };
-    const jwtToken = this.jwtService.sign(payload);
+    console.log(`User ${id} logged in with token ${newToken}`);
 
     return {
       token: newToken,
-      jwtToken: jwtToken,
       expiryDate: user.expiryDate,
       id: user.id,
       deviceId: newDeviceId

@@ -69,13 +69,20 @@ export class UsersController {
 
     @Post('heartbeat')
     async heartbeat(@Body() body: { id: string }, @Headers('Authorization') authHeader: string) {
-        const token = authHeader.split(' ')[1]; // Bearer 토큰에서 실제 토큰 추출
-        const isValid = await this.usersService.checkTokenValidity(body.id, token);
-        if (!isValid) {
-            throw new UnauthorizedException('Token is invalid or expired');
+        try {
+            const token = authHeader.split(' ')[1];
+            console.log(`Received heartbeat for user ${body.id} with token ${token}`);
+            const isValid = await this.usersService.checkTokenValidity(body.id, token);
+            if (!isValid) {
+                console.log(`Token validation failed for user ${body.id}`);
+                throw new UnauthorizedException('Token is invalid or expired');
+            }
+            await this.usersService.heartbeat(body.id);
+            return { message: 'Heartbeat received' };
+        } catch (error) {
+            console.error(`Error in heartbeat: ${error.message}`);
+            throw error;
         }
-        await this.usersService.heartbeat(body.id);
-        return { message: 'Heartbeat received' };
     }
 
     @Post(':id/refresh-token')
@@ -103,11 +110,17 @@ export class UsersController {
     @ApiResponse({ status: 200, description: 'Token is valid.' })
     @ApiResponse({ status: 401, description: 'Token is invalid or expired.' })
     async checkToken(@Body() body: { id: string, token: string }) {
-        const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
-        if (isValid) {
-            return { message: 'Token is valid' };
-        } else {
-            throw new UnauthorizedException('Token is invalid or expired');
+        try {
+            console.log(`Checking token for user ${body.id}`);
+            const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
+            if (isValid) {
+                return { message: 'Token is valid' };
+            } else {
+                throw new UnauthorizedException('Token is invalid or expired');
+            }
+        } catch (error) {
+            console.error(`Error in checkToken: ${error.message}`);
+            throw error;
         }
     }
 
