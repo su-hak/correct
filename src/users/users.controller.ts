@@ -65,8 +65,12 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    async heartbeat(@Body('id') id: string) {
-        await this.usersService.heartbeat(id);
+    async heartbeat(@Body() body: { id: string, token: string }) {
+        const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
+        if (!isValid) {
+            throw new UnauthorizedException('Token is invalid or expired');
+        }
+        await this.usersService.heartbeat(body.id);
         return { message: 'Heartbeat received' };
     }
 
@@ -89,20 +93,33 @@ export class UsersController {
             throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-  
+
+    @Post('check-token')
+    @ApiOperation({ summary: '토큰 유효성 검사' })
+    @ApiResponse({ status: 200, description: 'Token is valid.' })
+    @ApiResponse({ status: 401, description: 'Token is invalid or expired.' })
+    async checkToken(@Body() body: { id: string, token: string }) {
+        const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
+        if (isValid) {
+            return { message: 'Token is valid' };
+        } else {
+            throw new UnauthorizedException('Token is invalid or expired');
+        }
+    }
+
     @Post(':id/delete-token-expiration')
     @ApiOperation({ summary: '토큰 만료 삭제' })
     @ApiResponse({ status: 200, description: 'Token expiration deleted successfully.', type: User })
     @ApiResponse({ status: 404, description: 'User not found' })
     async deleteTokenExpiration(
-      @Param('id') id: string,
-      @Body() deleteTokenExpirationDto: DeleteTokenExpirationDto
+        @Param('id') id: string,
+        @Body() deleteTokenExpirationDto: DeleteTokenExpirationDto
     ) {
-      if (deleteTokenExpirationDto.deleteExpiration) {
-        const user = await this.usersService.deleteTokenExpiration(id);
-        return { message: 'Token expiration deleted successfully', user };
-      }
-      throw new HttpException('Invalid request', HttpStatus.BAD_REQUEST);
+        if (deleteTokenExpirationDto.deleteExpiration) {
+            const user = await this.usersService.deleteTokenExpiration(id);
+            return { message: 'Token expiration deleted successfully', user };
+        }
+        throw new HttpException('Invalid request', HttpStatus.BAD_REQUEST);
     }
 
     @Get()

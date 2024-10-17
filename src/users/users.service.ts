@@ -119,6 +119,20 @@ export class UsersService {
     return new Date(Date.now() + duration * multiplier);
   }
 
+  async checkTokenValidity(id: string, token: string): Promise<boolean> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      return false;
+    }
+    if (user.token !== token) {
+      return false;
+    }
+    if (user.expiryDate && new Date() > user.expiryDate) {
+      return false;
+    }
+    return true;
+  }
+
   async findOne(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {

@@ -73,3 +73,15 @@ export class DeleteTokenExpirationDto {
   @IsBoolean()
   deleteExpiration: boolean;
 }
+
+export class CheckTokenDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
