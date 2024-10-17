@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CheckTokenDto, CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -127,10 +127,12 @@ export class UsersController {
     @ApiOperation({ summary: '토큰 유효성 검사' })
     @ApiResponse({ status: 200, description: 'Token is valid.' })
     @ApiResponse({ status: 401, description: 'Token is invalid or expired.' })
-    async checkToken(@Body() body: { id: string, token: string }) {
+    async checkToken(@Body() body: CheckTokenDto) {
         try {
             console.log(`Checking token for user ${body.id}`);
+            console.log(`Received token: ${body.token}`);
             const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
+            console.log(`Token validity result: ${isValid}`);
             if (isValid) {
                 return { message: 'Token is valid' };
             } else {

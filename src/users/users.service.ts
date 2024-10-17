@@ -123,7 +123,7 @@ export class UsersService {
   async checkTokenValidity(id: string, token: string): Promise<boolean> {
     console.log(`Checking token validity for user ${id}`);
     const user = await this.usersRepository.findOne({ where: { id } });
-    console.log('User found:', user);
+    console.log('User found:', JSON.stringify(user, null, 2));
     if (!user) {
       console.log(`User ${id} not found`);
       return false;
@@ -134,7 +134,7 @@ export class UsersService {
       return false;
     }
     if (user.expiryDate && new Date() > user.expiryDate) {
-      console.log(`Token expired for user ${id}. Expiry date: ${user.expiryDate}`);
+      console.log(`Token expired for user ${id}. Expiry date: ${user.expiryDate}, Current date: ${new Date()}`);
       return false;
     }
     if (!user.isLoggedIn) {
