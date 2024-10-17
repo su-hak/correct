@@ -92,3 +92,10 @@ export class CheckTokenDto {
   @IsNotEmpty()
   token: string;
 }
+
+export class HeartbeatDto {
+  @ApiProperty({ example: 'john_doe', description: 'The unique code name of the user' })
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+}

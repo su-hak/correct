@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -68,18 +68,14 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    async heartbeat(@Body() body: { id: string }, @Headers() headers) {
+    @ApiOperation({ summary: '사용자 활동 확인' })
+    @ApiResponse({ status: 200, description: 'Heartbeat received successfully.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    async heartbeat(@Body() heartbeatDto: HeartbeatDto, @Headers('Authorization') authHeader: string) {
         try {
             console.log('Received heartbeat request');
-            console.log('Request body:', body);
-            console.log('Request headers:', headers);
-
-            const { id } = body;
-            const authHeader = headers['authorization'];
-
-            if (!id) {
-                throw new BadRequestException('User ID is required');
-            }
+            console.log('Request body:', heartbeatDto);
+            console.log('Authorization header:', authHeader);
 
             if (!authHeader) {
                 throw new UnauthorizedException('No authorization header provided');
@@ -93,13 +89,13 @@ export class UsersController {
 
             console.log(`Extracted token: ${token}`);
 
-            const isValid = await this.usersService.checkTokenValidity(id, token);
+            const isValid = await this.usersService.checkTokenValidity(heartbeatDto.id, token);
             if (!isValid) {
-                console.log(`Token validation failed for user ${id}`);
+                console.log(`Token validation failed for user ${heartbeatDto.id}`);
                 throw new UnauthorizedException('Token is invalid or expired');
             }
 
-            await this.usersService.heartbeat(id);
+            await this.usersService.heartbeat(heartbeatDto.id);
             return { message: 'Heartbeat received' };
         } catch (error) {
             console.error(`Error in heartbeat: ${error.message}`);
