@@ -66,7 +66,7 @@ export class UsersService {
     }
     user.isLoggedIn = false;
     await this.usersRepository.save(user);
-  }
+}
 
   async heartbeat(id: string): Promise<void> {
     const user = await this.usersRepository.findOne({ where: { id } });

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -59,8 +59,11 @@ export class UsersController {
     }
 
     @Post('logout')
-    async logout(@Body('id') id: string) {
-        await this.usersService.logout(id);
+    @ApiOperation({ summary: '로그아웃' })
+    @ApiResponse({ status: 201, description: 'Logout successful.', type: User })
+    @ApiBody({ type: LogoutUserDto })
+    async logout(@Body() logoutUserDto: LogoutUserDto) {
+        await this.usersService.logout(logoutUserDto);
         return { message: 'Logged out successfully' };
     }
 
