@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
 import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
@@ -68,8 +68,9 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    async heartbeat(@Body() body: { id: string, token: string }) {
-        const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
+    async heartbeat(@Body() body: { id: string }, @Headers('Authorization') authHeader: string) {
+        const token = authHeader.split(' ')[1]; // Bearer 토큰에서 실제 토큰 추출
+        const isValid = await this.usersService.checkTokenValidity(body.id, token);
         if (!isValid) {
             throw new UnauthorizedException('Token is invalid or expired');
         }

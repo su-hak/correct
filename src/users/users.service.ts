@@ -35,9 +35,9 @@ export class UsersService {
   async login(loginUserDto: LoginUserDto): Promise<User> {
     const { id } = loginUserDto;
     console.log('Login attempt in UsersService:', { id });
-  
+
     const user = await this.usersRepository.findOne({ where: { id } });
-  
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -47,14 +47,14 @@ export class UsersService {
     if (new Date() > user.expiryDate) {
       throw new UnauthorizedException('Token has expired');
     }
-  
+
     // 로그인 상태 업데이트
     user.isLoggedIn = true;
     user.lastHeartbeat = new Date();
-    
+
     const updatedUser = await this.usersRepository.save(user);
     console.log('User logged in:', JSON.stringify(updatedUser, null, 2));
-    
+
     return updatedUser;
   }
 
@@ -66,7 +66,7 @@ export class UsersService {
     }
     user.isLoggedIn = false;
     await this.usersRepository.save(user);
-}
+  }
 
   async heartbeat(id: string): Promise<void> {
     const user = await this.usersRepository.findOne({ where: { id } });
@@ -97,12 +97,12 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    
+
     // 토큰 만료 여부와 관계없이 새 토큰 발급
     user.token = uuidv4();
     user.expiryDate = this.calculateExpiryDate(refreshTokenDto.expiryDuration, refreshTokenDto.expiryUnit);
     user.deviceId = null;
-    
+
     return this.usersRepository.save(user);
   }
 
@@ -129,6 +129,9 @@ export class UsersService {
       return false;
     }
     if (user.expiryDate && new Date() > user.expiryDate) {
+      return false;
+    }
+    if (!user.isLoggedIn) {
       return false;
     }
     return true;
