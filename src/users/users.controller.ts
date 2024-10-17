@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
 import { CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
+@ApiBearerAuth()
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
@@ -68,14 +69,13 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    @ApiOperation({ summary: '사용자 활동 확인' })
-    @ApiResponse({ status: 200, description: 'Heartbeat received successfully.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized' })
-    async heartbeat(@Body() heartbeatDto: HeartbeatDto, @Headers('Authorization') authHeader: string) {
+    async heartbeat(@Body() heartbeatDto: HeartbeatDto, @Req() request: Request) {
         try {
             console.log('Received heartbeat request');
             console.log('Request body:', heartbeatDto);
-            console.log('Authorization header:', authHeader);
+            console.log('All headers:', request.headers);
+
+            const authHeader = request.headers['authorization'];
 
             if (!authHeader) {
                 throw new UnauthorizedException('No authorization header provided');
