@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
 import { CreateUserDto, DeleteTokenExpirationDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
@@ -68,10 +68,18 @@ export class UsersController {
     }
 
     @Post('heartbeat')
-    async heartbeat(@Body() body: { id: string }, @Headers('Authorization') authHeader: string) {
+    async heartbeat(@Body() body: { id: string }, @Headers() headers) {
         try {
-            console.log(`Received heartbeat for user ${body.id}`);
-            console.log(`Authorization header: ${authHeader}`);
+            console.log('Received heartbeat request');
+            console.log('Request body:', body);
+            console.log('Request headers:', headers);
+
+            const { id } = body;
+            const authHeader = headers['authorization'];
+
+            if (!id) {
+                throw new BadRequestException('User ID is required');
+            }
 
             if (!authHeader) {
                 throw new UnauthorizedException('No authorization header provided');
@@ -85,13 +93,13 @@ export class UsersController {
 
             console.log(`Extracted token: ${token}`);
 
-            const isValid = await this.usersService.checkTokenValidity(body.id, token);
+            const isValid = await this.usersService.checkTokenValidity(id, token);
             if (!isValid) {
-                console.log(`Token validation failed for user ${body.id}`);
+                console.log(`Token validation failed for user ${id}`);
                 throw new UnauthorizedException('Token is invalid or expired');
             }
 
-            await this.usersService.heartbeat(body.id);
+            await this.usersService.heartbeat(id);
             return { message: 'Heartbeat received' };
         } catch (error) {
             console.error(`Error in heartbeat: ${error.message}`);
