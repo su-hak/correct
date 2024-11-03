@@ -6,7 +6,6 @@ import { AuthGuard } from '../auth/auth.guard';
 export class GrammarController {
   constructor(private grammarService: GrammarService) {}
 
-  @UseGuards(AuthGuard)
   @Post('check')
   async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ correctSentence: string }> {
     return this.grammarService.checkGrammar(sentences);
