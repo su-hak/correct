@@ -26,84 +26,58 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[], correctIndex: number, sentenceScores: number[] }> {
-    this.logger.log(`Image buffer received. Size: ${imageBuffer.length} bytes`);
-
     try {
-      const metadata = await sharp(imageBuffer).metadata();
-      this.logger.log(`Image metadata: ${JSON.stringify(metadata)}`);
-
+      // 1. 이미지 최적화 (크기 줄이기)
       const resizedBuffer = await sharp(imageBuffer)
-        .resize({ width: 800, height: 800, fit: 'inside' })
-        .jpeg({ quality: 90 })
+        .resize(800, 600, { 
+          fit: 'inside',
+          withoutEnlargement: true 
+        })
+        .jpeg({ quality: 85 })
         .toBuffer();
-
-      const base64Image = resizedBuffer.toString('base64');
-
+  
+      // 2. Vision API 요청 최적화
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
-          requests: [
-            {
-              image: { content: base64Image },
-              features: [{ type: 'TEXT_DETECTION' }]
-            }
-          ]
+          requests: [{
+            image: { content: resizedBuffer.toString('base64') },
+            features: [{
+              type: 'TEXT_DETECTION',
+              model: 'builtin/latest',
+              languageHints: ['ko']
+            }]
+          }]
         }
       );
-
+  
+      // 3. 텍스트 추출 및 필터링 최적화
       const detections = response.data.responses[0].textAnnotations || [];
-      this.logger.log(`Number of text annotations: ${detections.length}`);
-
-      if (detections.length === 0) {
-        this.logger.warn('No text detected in the image');
-        return { sentences: [], boundingBoxes: [], correctIndex: -1, sentenceScores: [] };
-      }
-
-      const fullText = detections[0].description || '';
-      const sentences = fullText.split('\n')
+      if (detections.length === 0) return { 
+        sentences: [], 
+        boundingBoxes: [], 
+        correctIndex: -1, 
+        sentenceScores: [] 
+      };
+  
+      const sentences = detections[0].description
+        .split('\n')
         .map(s => s.trim())
-        .filter(s => this.isValidSentence(s));
-
-      const limitedSentences = sentences.slice(0, 5);
-
-      // 첫 번째 요소는 전체 텍스트이므로 제외
-      const textBlocks = detections.slice(1);
-
-      const boundingBoxes = limitedSentences.map((sentence, index) => {
-        const block = textBlocks.find(b => b.description.trim() === sentence.trim());
-        if (block && block.boundingBox) {
-          return {
-            vertices: [
-              { x: block.boundingBox.vertices[0].x / metadata.width, y: block.boundingBox.vertices[0].y / metadata.height },
-              { x: block.boundingBox.vertices[1].x / metadata.width, y: block.boundingBox.vertices[1].y / metadata.height },
-              { x: block.boundingBox.vertices[2].x / metadata.width, y: block.boundingBox.vertices[2].y / metadata.height },
-              { x: block.boundingBox.vertices[3].x / metadata.width, y: block.boundingBox.vertices[3].y / metadata.height },
-            ]
-          };
-        }
-        return null;
-      }).filter(box => box !== null);
-
-      // GrammarService를 사용하여 각 문장의 점수를 얻습니다.
-    const sentenceScores = await Promise.all(limitedSentences.map(sentence => 
-      this.grammarService.evaluateSentence(sentence).then(result => result.score)
-    ));
-
-    // correctIndex 계산
-    const correctIndex = await this.grammarService.findMostNaturalSentenceIndex(limitedSentences);
-
-    this.logger.log(`Extracted sentences: ${limitedSentences.join(', ')}`);
-    this.logger.log(`Sentence scores: ${sentenceScores.join(', ')}`);
-    this.logger.log(`Correct index: ${correctIndex}`);
-    this.logger.log(`Bounding boxes: ${JSON.stringify(boundingBoxes)}`);
-
-    return { sentences: limitedSentences, boundingBoxes, correctIndex, sentenceScores };
+        .filter(this.isValidSentence)
+        .slice(0, 5);  // 최대 5개 문장만 선택
+  
+      // 4. 문법 평가 (단일 API 호출)
+      const { correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+  
+      return {
+        sentences,
+        boundingBoxes: [],  // boundingBoxes 계산 생략 (필요한 경우에만 활성화)
+        correctIndex,
+        sentenceScores
+      };
     } catch (error) {
-      this.logger.error(`Failed to analyze image: ${error.message}`, error.stack);
-      if (error.response) {
-        this.logger.error(`API response error: ${JSON.stringify(error.response.data)}`);
-      }
-      throw new InternalServerErrorException(`Image analysis failed: ${error.message}`);
+      this.logger.error(`Failed to analyze image: ${error.message}`);
+      throw error;
     }
   }
 
