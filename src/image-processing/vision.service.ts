@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as sharp from 'sharp';
 import { GrammarService } from 'src/grammar/grammar.service';
+import * as https from 'https';
 
 @Injectable()
 export class VisionService {
@@ -24,51 +25,51 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
-      // Vision API 요청 간소화
+      const agent = new https.Agent({ keepAlive: true });
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
-            image: {
-              content: imageBuffer.toString('base64')
-            },
-            features: [{
-              type: 'TEXT_DETECTION'
-            }]
+            image: { content: imageBuffer.toString('base64') },
+            features: [{ type: 'TEXT_DETECTION' }]
           }]
+        },
+        {
+          timeout: 1500,
+          httpAgent: agent,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
 
-      const textAnnotations = response.data.responses[0]?.textAnnotations || [];
-      if (textAnnotations.length === 0) {
-        return { sentences: [], boundingBoxes: [], correctIndex: -1, correctSentence: '', sentenceScores: [] };
-      }
+      const textAnnotations = response.data.responses[0]?.textAnnotations;
+      if (!textAnnotations?.length) return this.getEmptyResponse();
 
-      // 문장 추출 최적화
       const sentences = textAnnotations[0].description
         .split('\n')
-        .map(s => s.trim())
-        .filter(s => /[가-힣]/.test(s) && !s.includes('올바른 문장을 선택해 주세요'))
+        .filter(s => s.trim() && /[가-힣]/.test(s))
         .slice(0, 5);
 
-      if (sentences.length === 0) {
-        return { sentences: [], boundingBoxes: [], correctIndex: -1, correctSentence: '', sentenceScores: [] };
-      }
+      if (!sentences.length) return this.getEmptyResponse();
 
-      // GPT 분석
-      const { correctSentence, correctIndex, sentenceScores } = 
-        await this.grammarService.findMostNaturalSentence(sentences);
-
+      const grammarResult = await this.grammarService.findMostNaturalSentence(sentences);
       return {
         sentences,
         boundingBoxes: [],
-        correctIndex,
-        correctSentence,
-        sentenceScores
+        ...grammarResult
       };
+
     } catch (error) {
-      this.logger.error('Vision API error:', error);
-      throw error;
+      return this.getEmptyResponse();
     }
+  }
+
+  private getEmptyResponse() {
+    return {
+      sentences: [],
+      boundingBoxes: [],
+      correctIndex: -1,
+      correctSentence: '',
+      sentenceScores: []
+    };
   }
 }
