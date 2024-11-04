@@ -28,159 +28,113 @@ export class VisionService {
 
   async detectTextInImage(imageBuffer: Buffer): Promise<{ 
     sentences: string[], 
-    boundingBoxes: any[], 
-    correctIndex: number, 
-    correctSentence: string,
-    sentenceScores: number[] 
-  }> {
+    boundingBoxes: any[]
+}> {
     try {
-      // 1. 이미지 유효성 검사
-      if (!imageBuffer || imageBuffer.length === 0) {
-        throw new Error('Empty image buffer received');
-      }
-
-      if (imageBuffer.length > this.MAX_IMAGE_SIZE) {
-        throw new Error('Image size exceeds maximum limit of 10MB');
-      }
-
-      if (!this.isValidImageFormat(imageBuffer)) {
-        throw new Error('Invalid image format. Only JPEG and PNG are supported');
-      }
-
-      // 2. 이미지 최적화
-      let optimizedBuffer: Buffer;
-      try {
-        optimizedBuffer = await sharp(imageBuffer)
-          .resize(800, 600, { 
-            fit: 'inside',
-            withoutEnlargement: true 
-          })
-          .jpeg({ 
-            quality: 85,
-            mozjpeg: true 
-          })
-          .toBuffer();
-      } catch (error) {
-        this.logger.error(`Image optimization failed: ${error.message}`);
-        optimizedBuffer = imageBuffer;
-      }
-
-      // 3. Vision API 요청
-      const response = await axios.post(
-        `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
-        {
-          requests: [{
-            image: {
-              content: optimizedBuffer.toString('base64')
+        // 이미지 최적화
+        const optimizedBuffer = await this.optimizeImage(imageBuffer);
+        
+        // Vision API 요청
+        const response = await axios.post(
+            `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
+            {
+                requests: [{
+                    image: {
+                        content: optimizedBuffer.toString('base64')
+                    },
+                    features: [{
+                        type: 'DOCUMENT_TEXT_DETECTION',  // TEXT_DETECTION 대신 DOCUMENT_TEXT_DETECTION 사용
+                        model: 'builtin/latest'
+                    }],
+                    imageContext: {
+                        languageHints: ['ko'],
+                        textDetectionParams: {
+                            enableTextDetectionConfidenceScore: true
+                        }
+                    }
+                }]
             },
-            features: [{
-              type: 'TEXT_DETECTION',
-              maxResults: 50
-            }],
-            imageContext: {
-              languageHints: ['ko']  // languageHints는 imageContext 내부에 위치
+            {
+                timeout: 30000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             }
-          }]
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          timeout: 30000
+        );
+
+        const textAnnotations = response.data.responses[0]?.textAnnotations;
+        
+        if (!textAnnotations || textAnnotations.length === 0) {
+            this.logger.warn('No text detected in the image');
+            return { sentences: [], boundingBoxes: [] };
         }
-      );
 
-      // 4. 응답 유효성 검사
-      if (!response.data || !response.data.responses || !response.data.responses[0]) {
-        throw new Error('Invalid response from Vision API');
-      }
+        // 텍스트 추출 및 처리
+        const text = textAnnotations[0].description;
+        this.logger.debug(`Raw detected text: ${text}`);
 
-      const detections = response.data.responses[0].textAnnotations || [];
-      if (detections.length === 0) {
-        return { 
-          sentences: [], 
-          boundingBoxes: [], 
-          correctIndex: -1, 
-          correctSentence: '',
-          sentenceScores: [] 
-        };
-      }
+        // 문장 분리 및 필터링 개선
+        let sentences = text.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .filter(this.isValidKoreanSentence);
 
-      // 5. 텍스트 추출 및 필터링
-      const sentences = detections[0].description
-        .split('\n')
-        .map(s => s.trim())
-        .filter(s => s && this.isValidSentence(s))
-        .slice(0, 5);
+        // 중복 제거
+        sentences = [...new Set(sentences)];
 
-      if (sentences.length === 0) {
-        return {
-          sentences: [],
-          boundingBoxes: [],
-          correctIndex: -1,
-          correctSentence: '',
-          sentenceScores: []
-        };
-      }
+        // 최대 5개 문장으로 제한
+        sentences = sentences.slice(0, 5);
 
-      // 6. 문법 평가
-      const { correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+        this.logger.debug(`Processed sentences: ${JSON.stringify(sentences)}`);
 
-      // 7. 바운딩 박스 추출
-      const boundingBoxes = detections.slice(1)
-        .filter(d => d.boundingPoly && d.boundingPoly.vertices)
-        .map(d => d.boundingPoly.vertices);
+        // 바운딩 박스 추출
+        const boundingBoxes = textAnnotations
+            .slice(1)
+            .map(annotation => annotation.boundingPoly?.vertices || []);
 
-      return {
-        sentences,
-        boundingBoxes,
-        correctIndex,
-        correctSentence: sentences[correctIndex] || '',
-        sentenceScores
-      };
+        return { sentences, boundingBoxes };
 
     } catch (error) {
-      this.logger.error('Failed to analyze image:', {
-        error: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-
-      if (error.response?.status === 400) {
-        const errorMessage = error.response.data?.error?.message || 'Invalid request to Vision API';
-        throw new Error(errorMessage);
-      }
-
-      throw new Error('Failed to process image: ' + error.message);
+        this.logger.error('Vision API error:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        });
+        throw error;
     }
+}
+
+private async optimizeImage(buffer: Buffer): Promise<Buffer> {
+  try {
+      return await sharp(buffer)
+          .resize(1920, 1080, {
+              fit: 'inside',
+              withoutEnlargement: true
+          })
+          .normalize() // 이미지 정규화
+          .sharpen() // 선명도 개선
+          .jpeg({
+              quality: 90,
+              force: true,
+              mozjpeg: true
+          })
+          .toBuffer();
+  } catch (error) {
+      this.logger.error('Image optimization failed:', error);
+      return buffer;
   }
+}
 
-  private isValidImageFormat(buffer: Buffer): boolean {
-    // JPEG 시그니처 확인
-    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
-      return true;
-    }
-    // PNG 시그니처 확인
-    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
-      return true;
-    }
-    return false;
-  }
-
-  private isValidSentence(sentence: string): boolean {
-    if (!sentence || sentence.trim().length === 0) {
-      return false;
-    }
-
-    if (/^[a-zA-Z0-9\s\W]+$/.test(sentence)) {
-      return false;
-    }
-
-    if (sentence.includes("올바른 문장을 선택해 주세요")) {
-      return false;
-    }
-
-    return /[가-힣]/.test(sentence);
-  }
+private isValidKoreanSentence(text: string): boolean {
+  if (!text || text.length === 0) return false;
+  
+  // 영어나 숫자만 있는 경우 제외
+  if (/^[a-zA-Z0-9\s]+$/.test(text)) return false;
+  
+  // "올바른 문장을 선택해 주세요" 제외
+  if (text.includes('올바른 문장을 선택해 주세요')) return false;
+  
+  // 한글이 포함된 경우만 유효
+  return /[가-힣]/.test(text);
+}
 }
