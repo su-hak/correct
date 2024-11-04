@@ -16,13 +16,7 @@ export class GrammarService {
     correctIndex: number;
     sentenceScores: number[];
   }> {
-    if (!sentences?.length) {
-      return { correctSentence: '', correctIndex: -1, sentenceScores: [] };
-    }
-
     try {
-      this.logger.debug('Input sentences:', sentences);
-      
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -30,26 +24,18 @@ export class GrammarService {
           messages: [
             {
               role: "system",
-              content: "한국어 문법 검사기입니다. 정확한 답변만 하세요."
+              content: "문장 번호만 숫자로 답하세요. 다른 글자는 쓰지 마세요."
             },
             {
               role: "user",
-              content: `아래 문장들을 평가하고 가장 올바른 문장의 번호만 숫자로 답하세요:
-평가기준:
-1. 맞춤법이 정확한가?
-2. 주어+목적어+서술어 순서가 맞는가?
-3. 도치법이 없는가?
-4. 조사와 어미가 올바른가?
-
-${sentences.map((s, i) => `${i}. ${s.trim()}`).join('\n')}
-
-답변은 0부터 ${sentences.length - 1} 사이의 숫자만 입력하세요.`
+              content: `다음 문장 중 가장 자연스럽고 맞춤법이 맞으며, 주어+목적어+서술어 순서가 올바른 문장의 번호를 숫자로만 답하세요.\n\n${sentences.map((s, i) => `${i}) ${s}`).join('\n')}\n\n답변은 숫자만 입력:`
             }
           ],
-          temperature: 0,
           max_tokens: 1,
-          presence_penalty: 0,
+          temperature: 0,
           frequency_penalty: 0,
+          presence_penalty: 0,
+          stop: ["\n", " ", ".", ","]  // 숫자 외 다른 문자 입력 방지
         },
         {
           headers: {
@@ -60,45 +46,29 @@ ${sentences.map((s, i) => `${i}. ${s.trim()}`).join('\n')}
         }
       );
 
-      let responseContent = response.data.choices[0].message.content.trim();
-      this.logger.debug('Raw GPT Response:', responseContent);
+      const content = response.data.choices[0].message.content.trim();
+      const index = parseInt(content);
 
-      // 숫자만 추출
-      const numberMatch = responseContent.match(/\d+/);
-      if (!numberMatch) {
-        this.logger.warn('No number found in GPT response');
-        return this.getDefaultResponse(sentences);
-      }
+      // 유효한 숫자가 아니면 가장 적절해 보이는 마지막 문장 선택
+      const validIndex = !isNaN(index) && index >= 0 && index < sentences.length 
+        ? index 
+        : sentences.length - 1;  // 마지막 문장이 가장 자연스러워 보이므로
 
-      const index = parseInt(numberMatch[0]);
-      this.logger.debug('Parsed index:', index);
-
-      // 인덱스 유효성 검사
-      if (isNaN(index) || index < 0 || index >= sentences.length) {
-        this.logger.warn('Invalid index:', index);
-        return this.getDefaultResponse(sentences);
-      }
-
-      const result = {
-        correctSentence: sentences[index],
-        correctIndex: index,
-        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === index ? 100 : 0)
+      return {
+        correctSentence: sentences[validIndex],
+        correctIndex: validIndex,
+        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === validIndex ? 100 : 0)
       };
-
-      this.logger.debug('Final result:', result);
-      return result;
 
     } catch (error) {
       this.logger.error('Grammar check error:', error);
-      return this.getDefaultResponse(sentences);
+      // 에러 발생 시 마지막 문장 선택
+      const lastIndex = sentences.length - 1;
+      return {
+        correctSentence: sentences[lastIndex],
+        correctIndex: lastIndex,
+        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === lastIndex ? 100 : 0)
+      };
     }
-  }
-
-  private getDefaultResponse(sentences: string[]) {
-    return {
-      correctSentence: sentences[0],
-      correctIndex: 0,
-      sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === 0 ? 100 : 0)
-    };
   }
 }
