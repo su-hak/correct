@@ -25,9 +25,14 @@ export class VisionService {
     }
   }
 
-  async detectTextInImage(imageBuffer: Buffer): Promise<{ sentences: string[], boundingBoxes: any[], correctIndex: number, sentenceScores: number[] }> {
+  async detectTextInImage(imageBuffer: Buffer): Promise<{ 
+    sentences: string[], 
+    boundingBoxes: any[], 
+    correctIndex: number, 
+    sentenceScores: number[] 
+  }> {
     try {
-      // 1. 이미지 최적화 (크기 줄이기)
+      // 1. 이미지 최적화
       const resizedBuffer = await sharp(imageBuffer)
         .resize(800, 600, { 
           fit: 'inside',
@@ -36,7 +41,7 @@ export class VisionService {
         .jpeg({ quality: 85 })
         .toBuffer();
   
-      // 2. Vision API 요청 최적화
+      // 2. Vision API 요청
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
@@ -51,14 +56,16 @@ export class VisionService {
         }
       );
   
-      // 3. 텍스트 추출 및 필터링 최적화
+      // 3. 텍스트 추출 및 필터링
       const detections = response.data.responses[0].textAnnotations || [];
-      if (detections.length === 0) return { 
-        sentences: [], 
-        boundingBoxes: [], 
-        correctIndex: -1, 
-        sentenceScores: [] 
-      };
+      if (detections.length === 0) {
+        return { 
+          sentences: [], 
+          boundingBoxes: [], 
+          correctIndex: -1, 
+          sentenceScores: [] 
+        };
+      }
   
       const sentences = detections[0].description
         .split('\n')
@@ -66,12 +73,12 @@ export class VisionService {
         .filter(this.isValidSentence)
         .slice(0, 5);  // 최대 5개 문장만 선택
   
-      // 4. 문법 평가 (단일 API 호출)
+      // 4. 문법 평가 (배치 처리)
       const { correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
   
       return {
         sentences,
-        boundingBoxes: [],  // boundingBoxes 계산 생략 (필요한 경우에만 활성화)
+        boundingBoxes: detections.slice(1).map(d => d.boundingPoly.vertices),
         correctIndex,
         sentenceScores
       };
@@ -82,38 +89,11 @@ export class VisionService {
   }
 
   private isValidSentence(sentence: string): boolean {
-    // 영어, 숫자, "올바른 문장을 선택해 주세요" 제외
     if (/^[a-zA-Z0-9\s]+$/.test(sentence) || 
         sentence === "올바른 문장을 선택해 주세요" ||
         /^\d+$/.test(sentence)) {
       return false;
     }
-
-    // 한글이 포함된 문장만 유효하다고 판단
     return /[가-힣]/.test(sentence);
-  }
-
-  async detectTextWithRetry(imageBuffer: Buffer, maxRetries = 3): Promise<{ sentences: string[], boundingBoxes: any[] }> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await this.detectTextInImage(imageBuffer);
-      } catch (error) {
-        if (error.code !== 2 || attempt === maxRetries) throw error;
-        this.logger.warn(`Attempt ${attempt} failed, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      }
-    }
-  }
-
-  private isValidImageFormat(buffer: Buffer): boolean {
-    // JPEG 시그니처 확인
-    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
-      return true;
-    }
-    // PNG 시그니처 확인
-    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
-      return true;
-    }
-    return false;
   }
 }

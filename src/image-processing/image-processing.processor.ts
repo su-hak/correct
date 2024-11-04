@@ -17,50 +17,34 @@ export class ImageProcessingProcessor {
     ) { }
 
     @Process('processImage')
-    async handleProcessImage(job: Job) {
-        this.logger.log(`Processing image job ${job.id}`);
-        const { jobId, base64Image } = job.data;
+async handleProcessImage(job: Job) {
+    this.logger.log(`Processing image job ${job.id}`);
+    const { jobId, base64Image } = job.data;
 
-        try {
-            const imageBuffer = Buffer.from(base64Image, 'base64');
+    try {
+        const imageBuffer = Buffer.from(base64Image, 'base64');
 
-            // Parallel processing of text detection and initial grammar check
-            const [{ sentences, boundingBoxes }, initialGrammarCheck] = await Promise.all([
-                this.visionService.detectTextInImage(imageBuffer),
-                this.grammarService.checkGrammar([''])  // Warm up the grammar service
-            ]);
+        // Parallel processing of text detection
+        const { sentences, boundingBoxes, correctIndex, sentenceScores } = await this.visionService.detectTextInImage(imageBuffer);
 
-            if (sentences.length === 0) {
-                throw new Error('No sentences detected in the image');
-            }
-
-            // Parallel grammar checking for all sentences
-            const grammarChecks = await Promise.all(sentences.map(sentence => 
-                this.grammarService.evaluateSentence(sentence)
-            ));
-
-            let maxScore = -1;
-            let correctIndex = 0;
-            grammarChecks.forEach((check, index) => {
-                if (check.score > maxScore) {
-                    maxScore = check.score;
-                    correctIndex = index;
-                }
-            });
-
-            const result = {
-                sentences,
-                boundingBoxes,
-                correctSentence: sentences[correctIndex],
-                correctIndex
-            };
-
-            await this.cacheManager.set(jobId, result, 3600); // Cache for 1 hour
-
-            return result;
-        } catch (error) {
-            this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
-            throw error;
+        if (sentences.length === 0) {
+            throw new Error('No sentences detected in the image');
         }
+
+        const result = {
+            sentences,
+            boundingBoxes,
+            correctSentence: sentences[correctIndex],
+            correctIndex,
+            sentenceScores
+        };
+
+        await this.cacheManager.set(jobId, result, 3600); // Cache for 1 hour
+
+        return result;
+    } catch (error) {
+        this.logger.error(`Job ${job.id} failed: ${error.message}`, error.stack);
+        throw error;
     }
+}
 }
