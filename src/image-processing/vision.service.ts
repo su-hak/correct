@@ -24,81 +24,51 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
-      const optimizedBuffer = await this.optimizeImage(imageBuffer);
+      // Vision API 요청 간소화
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {
-              content: optimizedBuffer.toString('base64')
+              content: imageBuffer.toString('base64')
             },
             features: [{
-              type: 'TEXT_DETECTION',
-              maxResults: 10
-            }],
-            imageContext: {
-              languageHints: ['ko']
-            }
+              type: 'TEXT_DETECTION'
+            }]
           }]
         }
       );
 
       const textAnnotations = response.data.responses[0]?.textAnnotations || [];
-      const rawText = textAnnotations[0]?.description || '';
-      
-      // 문장 추출 및 필터링 최적화
-      const sentences = rawText.split('\n')
+      if (textAnnotations.length === 0) {
+        return { sentences: [], boundingBoxes: [], correctIndex: -1, correctSentence: '', sentenceScores: [] };
+      }
+
+      // 문장 추출 최적화
+      const sentences = textAnnotations[0].description
+        .split('\n')
         .map(s => s.trim())
-        .filter(s => s && this.isValidKoreanSentence(s))
+        .filter(s => /[가-힣]/.test(s) && !s.includes('올바른 문장을 선택해 주세요'))
         .slice(0, 5);
 
       if (sentences.length === 0) {
-        return {
-          sentences: [],
-          boundingBoxes: [],
-          correctIndex: -1,
-          correctSentence: '',
-          sentenceScores: []
-        };
+        return { sentences: [], boundingBoxes: [], correctIndex: -1, correctSentence: '', sentenceScores: [] };
       }
 
-      // 문법 평가 로직 단순화
-      const defaultScore = 80;  // 기본 점수
-      const sentenceScores = sentences.map(() => defaultScore);
-      const correctIndex = 0;  // 첫 번째 문장을 기본값으로 사용
+      // GPT 분석
+      const { correctSentence, correctIndex, sentenceScores } = 
+        await this.grammarService.findMostNaturalSentence(sentences);
 
       return {
         sentences,
-        boundingBoxes: textAnnotations.slice(1).map(t => t.boundingPoly?.vertices || []),
+        boundingBoxes: [],
         correctIndex,
-        correctSentence: sentences[correctIndex],
+        correctSentence,
         sentenceScores
       };
-
     } catch (error) {
       this.logger.error('Vision API error:', error);
-      throw new InternalServerErrorException('Failed to process image');
+      throw error;
     }
-  }
-
-  private async optimizeImage(buffer: Buffer): Promise<Buffer> {
-    try {
-      return await sharp(buffer)
-        .resize(800, 600, {
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .jpeg({
-          quality: 80,
-          force: true
-        })
-        .toBuffer();
-    } catch (error) {
-      return buffer;
-    }
-  }
-
-  private isValidKoreanSentence(text: string): boolean {
-    return /[가-힣]/.test(text) && !text.includes('올바른 문장을 선택해 주세요');
   }
 }
