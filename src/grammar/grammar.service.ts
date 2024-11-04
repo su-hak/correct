@@ -5,8 +5,6 @@ import axios from 'axios';
 @Injectable()
 export class GrammarService {
   private readonly openaiApiKey: string;
-  private readonly cache = new Map<string, { result: any; timestamp: number }>();
-  private readonly CACHE_TTL = 60 * 60 * 1000; // 1시간
 
   constructor(private configService: ConfigService) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
@@ -21,27 +19,31 @@ export class GrammarService {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-3.5-turbo-instruct",  // 더 빠른 모델 사용
+          model: "gpt-3.5-turbo",
           messages: [
             {
+              role: "system",
+              content: "주어진 문장들 중 가장 자연스럽고 맞춤법이 정확한 문장의 인덱스만 숫자로 답하세요. 기준은 다음과 같습니다:\n1. 맞춤법이 올바른가\n2. 주어+목적어+서술어 순서가 맞는가\n3. 문장이 자연스러운가"
+            },
+            {
               role: "user",
-              content: `다음 문장들 중 가장 자연스러운 문장의 번호만 숫자로 답하세요:\n${sentences.map((s, i) => `${i}. ${s}`).join('\n')}`
+              content: `아래 문장 중에서 가장 자연스럽고 올바른 문장의 번호만 답하세요:\n${sentences.map((s, i) => `${i}. ${s}`).join('\n')}`
             }
           ],
-          max_tokens: 1,
           temperature: 0,
+          max_tokens: 1
         },
         {
           headers: {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 1500  // 1.5초 타임아웃
+          timeout: 1500
         }
       );
 
-      const index = parseInt(response.data.choices[0].message.content);
-      const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
+      const index = parseInt(response.data.choices[0].message.content.trim());
+      const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : sentences.length - 1;
 
       return {
         correctSentence: sentences[validIndex],
@@ -50,11 +52,12 @@ export class GrammarService {
       };
 
     } catch (error) {
-      // 에러 시 첫 번째 문장 반환 (빠른 실패)
+      // 에러 시 마지막 문장 선택
+      const lastIndex = sentences.length - 1;
       return {
-        correctSentence: sentences[0],
-        correctIndex: 0,
-        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === 0 ? 100 : 0)
+        correctSentence: sentences[lastIndex],
+        correctIndex: lastIndex,
+        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === lastIndex ? 100 : 0)
       };
     }
   }
