@@ -43,38 +43,44 @@ export class GrammarService {
           messages: [
             {
               role: "system",
-              content: "주어진 한국어 문장들 중 가장 문법적으로 올바른 문장의 인덱스만 숫자로 답하세요."
+              content: `당신은 한국어 맞춤법 전문가입니다. 
+              다음 기준으로 가장 올바른 문장을 선택하세요:
+              1. 맞춤법이 정확한가?
+              2. 주어+목적어+서술어 순서가 올바른가? (도치 불가)
+              3. 조사와 어미가 올바르게 사용되었는가?
+              문장 번호만 숫자로 답하세요.`
             },
             {
               role: "user",
-              content: sentences.join('\n')
+              content: sentences.map((s, i) => `${i}. ${s}`).join('\n')
             }
           ],
           temperature: 0.1,
-          max_tokens: 3,
+          max_tokens: 1,
+          presence_penalty: 0,
+          frequency_penalty: 0,
         },
         {
           headers: {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 3000  // 3초 타임아웃
         }
       );
 
       const correctIndex = parseInt(response.data.choices[0].message.content);
       
-      // 유효한 인덱스인지 확인
-      const validIndex = !isNaN(correctIndex) && 
-                        correctIndex >= 0 && 
-                        correctIndex < sentences.length;
+      if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= sentences.length) {
+        throw new Error('Invalid GPT response');
+      }
 
-      const finalIndex = validIndex ? correctIndex : 0;
-      const scores = Array(sentences.length).fill(0);
-      scores[finalIndex] = 100;
+      const scores = Array(sentences.length).fill(60);
+      scores[correctIndex] = 100;
 
       return {
-        correctSentence: sentences[finalIndex],
-        correctIndex: finalIndex,
+        correctSentence: sentences[correctIndex],
+        correctIndex,
         sentenceScores: scores
       };
 
@@ -84,11 +90,11 @@ export class GrammarService {
         error: error.stack
       });
 
-      // 에러 발생 시 첫 번째 문장을 반환
+      // 에러 발생 시 첫 번째 문장 반환
       return {
-        correctSentence: sentences[0] || '',
+        correctSentence: sentences[0],
         correctIndex: 0,
-        sentenceScores: sentences.map(() => 0)
+        sentenceScores: sentences.map(() => 60)
       };
     }
   }
