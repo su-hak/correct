@@ -7,7 +7,11 @@ export class GrammarController {
   constructor(private grammarService: GrammarService) {}
 
   @Post('check')
-  async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ correctSentence: string }> {
-    return this.grammarService.checkGrammar(sentences);
+  async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ 
+    correctSentence: string;
+    correctIndex: number;
+    sentenceScores: number[];
+  }> {
+    return this.grammarService.findMostNaturalSentence(sentences);
   }
 }

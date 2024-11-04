@@ -28,6 +28,14 @@ export class GrammarService {
     sentenceScores: number[];
   }> {
     try {
+      if (!sentences || sentences.length === 0) {
+        return {
+          correctSentence: '',
+          correctIndex: -1,
+          sentenceScores: []
+        };
+      }
+
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -54,18 +62,31 @@ export class GrammarService {
       );
 
       const correctIndex = parseInt(response.data.choices[0].message.content);
+      
+      // 유효한 인덱스인지 확인
+      const validIndex = !isNaN(correctIndex) && 
+                        correctIndex >= 0 && 
+                        correctIndex < sentences.length;
+
+      const finalIndex = validIndex ? correctIndex : 0;
       const scores = Array(sentences.length).fill(0);
-      scores[correctIndex] = 100;
+      scores[finalIndex] = 100;
 
       return {
-        correctSentence: sentences[correctIndex],
-        correctIndex,
+        correctSentence: sentences[finalIndex],
+        correctIndex: finalIndex,
         sentenceScores: scores
       };
+
     } catch (error) {
-      this.logger.error(`GPT API error: ${error.message}`);
+      this.logger.error(`Grammar check error: ${error.message}`, {
+        sentences,
+        error: error.stack
+      });
+
+      // 에러 발생 시 첫 번째 문장을 반환
       return {
-        correctSentence: sentences[0],
+        correctSentence: sentences[0] || '',
         correctIndex: 0,
         sentenceScores: sentences.map(() => 0)
       };
