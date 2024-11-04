@@ -56,33 +56,28 @@ export class VisionService {
           })
           .jpeg({ 
             quality: 85,
-            mozjpeg: true // 더 나은 압축을 위해 mozjpeg 사용
+            mozjpeg: true 
           })
           .toBuffer();
       } catch (error) {
         this.logger.error(`Image optimization failed: ${error.message}`);
-        optimizedBuffer = imageBuffer; // 최적화 실패 시 원본 사용
+        optimizedBuffer = imageBuffer;
       }
 
-      // 3. Base64 인코딩 및 Vision API 요청 준비
-      const base64Image = optimizedBuffer.toString('base64');
-      if (!base64Image) {
-        throw new Error('Failed to encode image to base64');
-      }
-
-      // 4. Vision API 요청
+      // 3. Vision API 요청
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
-            image: { content: base64Image },
+            image: {
+              content: optimizedBuffer.toString('base64')
+            },
             features: [{
               type: 'TEXT_DETECTION',
-              model: 'builtin/latest',
-              languageHints: ['ko']
+              maxResults: 50
             }],
             imageContext: {
-              languageHints: ['ko']
+              languageHints: ['ko']  // languageHints는 imageContext 내부에 위치
             }
           }]
         },
@@ -91,11 +86,11 @@ export class VisionService {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          timeout: 30000 // 30초 타임아웃
+          timeout: 30000
         }
       );
 
-      // 5. 응답 유효성 검사
+      // 4. 응답 유효성 검사
       if (!response.data || !response.data.responses || !response.data.responses[0]) {
         throw new Error('Invalid response from Vision API');
       }
@@ -110,12 +105,12 @@ export class VisionService {
         };
       }
 
-      // 6. 텍스트 추출 및 필터링
+      // 5. 텍스트 추출 및 필터링
       const sentences = detections[0].description
         .split('\n')
         .map(s => s.trim())
         .filter(s => s && this.isValidSentence(s))
-        .slice(0, 5);  // 최대 5개 문장만 선택
+        .slice(0, 5);
 
       if (sentences.length === 0) {
         return {
@@ -126,30 +121,34 @@ export class VisionService {
         };
       }
 
-      // 7. 문법 평가
+      // 6. 문법 평가
       const { correctIndex, sentenceScores } = await this.grammarService.findMostNaturalSentence(sentences);
+
+      // 7. 바운딩 박스 추출
+      const boundingBoxes = detections.slice(1)
+        .filter(d => d.boundingPoly && d.boundingPoly.vertices)
+        .map(d => d.boundingPoly.vertices);
 
       return {
         sentences,
-        boundingBoxes: detections.slice(1).map(d => d.boundingPoly?.vertices || []),
+        boundingBoxes,
         correctIndex,
         sentenceScores
       };
 
     } catch (error) {
-      // 8. 에러 상세 로깅
-      this.logger.error(`Failed to analyze image: ${error.message}`, {
-        stack: error.stack,
+      this.logger.error('Failed to analyze image:', {
+        error: error.message,
         response: error.response?.data,
-        status: error.response?.status,
+        status: error.response?.status
       });
-      
-      // API 특정 에러 처리
+
       if (error.response?.status === 400) {
-        throw new Error('Invalid image data or format. Please check the image and try again.');
+        const errorMessage = error.response.data?.error?.message || 'Invalid request to Vision API';
+        throw new Error(errorMessage);
       }
-      
-      throw error;
+
+      throw new Error('Failed to process image: ' + error.message);
     }
   }
 
@@ -166,22 +165,18 @@ export class VisionService {
   }
 
   private isValidSentence(sentence: string): boolean {
-    // 빈 문자열 체크 추가
     if (!sentence || sentence.trim().length === 0) {
       return false;
     }
 
-    // 영어, 숫자, 특수문자만 있는 경우 제외
     if (/^[a-zA-Z0-9\s\W]+$/.test(sentence)) {
       return false;
     }
 
-    // "올바른 문장을 선택해 주세요" 제외
     if (sentence.includes("올바른 문장을 선택해 주세요")) {
       return false;
     }
 
-    // 한글이 포함된 문장만 유효하다고 판단
     return /[가-힣]/.test(sentence);
   }
 }
