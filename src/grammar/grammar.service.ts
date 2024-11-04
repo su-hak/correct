@@ -4,8 +4,9 @@ import axios from 'axios';
 
 @Injectable()
 export class GrammarService {
-  private readonly logger = new Logger(GrammarService.name);
   private readonly openaiApiKey: string;
+  private readonly cache = new Map<string, { result: any; timestamp: number }>();
+  private readonly CACHE_TTL = 60 * 60 * 1000; // 1시간
 
   constructor(private configService: ConfigService) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
@@ -20,39 +21,27 @@ export class GrammarService {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-3.5-turbo",
+          model: "gpt-3.5-turbo-instruct",  // 더 빠른 모델 사용
           messages: [
             {
-              role: "system",
-              content: "문장 번호만 숫자로 답하세요. 다른 글자는 쓰지 마세요."
-            },
-            {
               role: "user",
-              content: `다음 문장 중 가장 자연스럽고 맞춤법이 맞으며, 주어+목적어+서술어 순서가 올바른 문장의 번호를 숫자로만 답하세요.\n\n${sentences.map((s, i) => `${i}) ${s}`).join('\n')}\n\n답변은 숫자만 입력:`
+              content: `다음 문장들 중 가장 자연스러운 문장의 번호만 숫자로 답하세요:\n${sentences.map((s, i) => `${i}. ${s}`).join('\n')}`
             }
           ],
           max_tokens: 1,
           temperature: 0,
-          frequency_penalty: 0,
-          presence_penalty: 0,
-          stop: ["\n", " ", ".", ","]  // 숫자 외 다른 문자 입력 방지
         },
         {
           headers: {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 2000
+          timeout: 1500  // 1.5초 타임아웃
         }
       );
 
-      const content = response.data.choices[0].message.content.trim();
-      const index = parseInt(content);
-
-      // 유효한 숫자가 아니면 가장 적절해 보이는 마지막 문장 선택
-      const validIndex = !isNaN(index) && index >= 0 && index < sentences.length 
-        ? index 
-        : sentences.length - 1;  // 마지막 문장이 가장 자연스러워 보이므로
+      const index = parseInt(response.data.choices[0].message.content);
+      const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
       return {
         correctSentence: sentences[validIndex],
@@ -61,13 +50,11 @@ export class GrammarService {
       };
 
     } catch (error) {
-      this.logger.error('Grammar check error:', error);
-      // 에러 발생 시 마지막 문장 선택
-      const lastIndex = sentences.length - 1;
+      // 에러 시 첫 번째 문장 반환 (빠른 실패)
       return {
-        correctSentence: sentences[lastIndex],
-        correctIndex: lastIndex,
-        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === lastIndex ? 100 : 0)
+        correctSentence: sentences[0],
+        correctIndex: 0,
+        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === 0 ? 100 : 0)
       };
     }
   }
