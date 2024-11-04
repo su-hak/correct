@@ -30,6 +30,7 @@ export class VisionService {
     sentences: string[], 
     boundingBoxes: any[], 
     correctIndex: number, 
+    correctSentence: string,
     sentenceScores: number[] 
   }> {
     try {
@@ -101,6 +102,7 @@ export class VisionService {
           sentences: [], 
           boundingBoxes: [], 
           correctIndex: -1, 
+          correctSentence: '',
           sentenceScores: [] 
         };
       }
@@ -117,6 +119,7 @@ export class VisionService {
           sentences: [],
           boundingBoxes: [],
           correctIndex: -1,
+          correctSentence: '',
           sentenceScores: []
         };
       }
@@ -133,6 +136,7 @@ export class VisionService {
         sentences,
         boundingBoxes,
         correctIndex,
+        correctSentence: sentences[correctIndex] || '',
         sentenceScores
       };
 
