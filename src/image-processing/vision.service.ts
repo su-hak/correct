@@ -17,6 +17,10 @@ export class VisionService {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
   }
 
+  private isValidKoreanSentence(text: string): boolean {
+    return /[가-힣]/.test(text) && !text.includes('올바른 문장을 선택해 주세요');
+  }
+
   async detectTextInImage(imageBuffer: Buffer): Promise<{
     sentences: string[];
     boundingBoxes: any[];
@@ -25,51 +29,62 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
-      const agent = new https.Agent({ keepAlive: true });
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
-            image: { content: imageBuffer.toString('base64') },
-            features: [{ type: 'TEXT_DETECTION' }]
+            image: {
+              content: imageBuffer.toString('base64')
+            },
+            features: [{
+              type: 'TEXT_DETECTION'
+            }]
           }]
-        },
-        {
-          timeout: 1500,
-          httpAgent: agent,
-          headers: { 'Content-Type': 'application/json' }
         }
       );
 
       const textAnnotations = response.data.responses[0]?.textAnnotations;
-      if (!textAnnotations?.length) return this.getEmptyResponse();
+      if (!textAnnotations || textAnnotations.length === 0) {
+        return {
+          sentences: [],
+          boundingBoxes: [],
+          correctIndex: -1,
+          correctSentence: '',
+          sentenceScores: []
+        };
+      }
 
+      // 문장 추출 및 필터링
       const sentences = textAnnotations[0].description
         .split('\n')
-        .filter(s => s.trim() && /[가-힣]/.test(s))
+        .map(s => s.trim())
+        .filter(s => s && this.isValidKoreanSentence(s))
         .slice(0, 5);
 
-      if (!sentences.length) return this.getEmptyResponse();
+      if (sentences.length === 0) {
+        return {
+          sentences: [],
+          boundingBoxes: [],
+          correctIndex: -1,
+          correctSentence: '',
+          sentenceScores: []
+        };
+      }
 
+      // 문법 평가
       const grammarResult = await this.grammarService.findMostNaturalSentence(sentences);
+
       return {
         sentences,
-        boundingBoxes: [],
-        ...grammarResult
+        boundingBoxes: textAnnotations.slice(1).map(t => t.boundingPoly?.vertices || []),
+        correctIndex: grammarResult.correctIndex,
+        correctSentence: grammarResult.correctSentence,
+        sentenceScores: grammarResult.sentenceScores
       };
 
     } catch (error) {
-      return this.getEmptyResponse();
+      this.logger.error('Vision API error:', error);
+      throw error;
     }
-  }
-
-  private getEmptyResponse() {
-    return {
-      sentences: [],
-      boundingBoxes: [],
-      correctIndex: -1,
-      correctSentence: '',
-      sentenceScores: []
-    };
   }
 }
