@@ -1,28 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { GrammarLearningService } from './grammar-Learning.service';
 
 @Injectable()
 export class GrammarService {
   private readonly openaiApiKey: string;
   
   private readonly logger = new Logger(GrammarService.name);
-  private readonly cache = new Map<string, {
-    result: {
-      correctSentence: string;
-      correctIndex: number;
-      sentenceScores: number[];
-    };
-    timestamp: number;
-  }>();
-  private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24시간
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private grammarLearningService: GrammarLearningService
+  ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-  }
-
-  private getCacheKey(sentences: string[]): string {
-    return sentences.join('|');
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{
@@ -30,16 +21,19 @@ export class GrammarService {
     correctIndex: number;
     sentenceScores: number[];
   }> {
-    const cacheKey = this.getCacheKey(sentences);
-    const cachedResult = this.cache.get(cacheKey);
-    
-    // 캐시된 결과가 있고 유효기간 내라면 반환
-    if (cachedResult && Date.now() - cachedResult.timestamp < this.CACHE_DURATION) {
-      this.logger.debug('Cache hit for sentences');
-      return cachedResult.result;
-    }
-
     try {
+      // 학습된 데이터에서 먼저 검색
+      const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
+      
+      if (learningResult.found) {
+        return {
+          correctSentence: learningResult.correctSentence!,
+          correctIndex: learningResult.correctIndex!,
+          sentenceScores: learningResult.sentenceScores!
+        };
+      }
+
+      // 학습된 데이터에 없는 경우 OpenAI API 호출
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -62,26 +56,26 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 5000  // 타임아웃 증가
+          timeout: 5000
         }
       );
 
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : sentences.length - 1;
 
-      const result = {
+      // 결과 학습
+      await this.grammarLearningService.learnCorrection(
+        sentences[0],
+        sentences[validIndex],
+        sentences,
+        1.0
+      );
+
+      return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
         sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === validIndex ? 100 : 0)
       };
-
-      // 결과 캐싱
-      this.cache.set(cacheKey, {
-        result,
-        timestamp: Date.now()
-      });
-
-      return result;
 
     } catch (error) {
       this.logger.error(`Error in grammar analysis: ${error.message}`);

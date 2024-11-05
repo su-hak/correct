@@ -9,6 +9,7 @@ import { generateSecret } from './utils/secret-generator';
 import { BullModule } from '@nestjs/bull';
 import { ImageProcessingModule } from './image-processing/image-processing.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { CreateGrammarLearning1699262400000 } from './migrations/1699262400000-CreateGrammarLearning';
 
 @Module({
   imports: [
@@ -45,6 +46,11 @@ import { CacheModule } from '@nestjs/cache-manager';
             password: configService.get('DB_PASSWORD'),
             database: configService.get('DB_NAME'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            migrations: [CreateGrammarLearning1699262400000],
+            migrationsRun: true, // 앱 시작 시 자동으로 마이그레이션 실행
+            ssl: {
+              rejectUnauthorized: false
+            },
             synchronize: configService.get('DB_SYNC') === 'true',
             logging: true,
             logger: 'advanced-console'
@@ -84,4 +90,4 @@ import { CacheModule } from '@nestjs/cache-manager';
     }),
   ],
 })
-export class AppModule {}
+export class AppModule { }

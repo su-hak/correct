@@ -19,9 +19,10 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "postinstall": "npm run build",
-    "typeorm": "typeorm-ts-node-commonjs",
-    "migration:run": "npm run typeorm migration:run -- -d src/data-source.ts",
-    "migration:revert": "npm run typeorm migration:revert -- -d src/data-source.ts"
+    "typeorm": "ts-node ./node_modules/typeorm/cli",
+    "migration:generate": "npm run typeorm -- migration:generate -n",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:revert": "npm run typeorm -- migration:revert"
   },
   "dependencies": {
     "@google-cloud/vision": "^4.3.2",
