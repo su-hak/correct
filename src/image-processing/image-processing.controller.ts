@@ -20,56 +20,50 @@ export class ImageProcessingController {
     ) { }
 
     @Post('analyze')
-    @UseInterceptors(FileInterceptor('image'))
-    async analyzeImage(
-        @UploadedFile() file: Express.Multer.File,
-        @Res() res: Response
-    ) {
+    async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
+        // 1. 빠른 응답 시작
+        res.setHeader('Content-Type', 'text/event-stream');
+        
         try {
-            // 1. SSE 헤더 설정
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
-
-            // 2. Vision API 호출 및 즉시 응답
-            const visionResult = await this.visionService.detectTextInImage(file.buffer);
+            // 2. 이미지 처리 시작
+            const optimizedBuffer = await sharp(file.buffer)
+                .resize(800, null)
+                .jpeg({ quality: 80 })
+                .toBuffer();
+    
+            // 3. Vision API 호출과 동시에 이미지 메타데이터 응답
+            const [visionResult] = await Promise.all([
+                this.visionService.detectTextInImage(optimizedBuffer),
+                res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`)
+            ]);
+    
+            // 4. 문장 목록 즉시 전송
             res.write(`data: ${JSON.stringify({
                 type: 'sentences',
                 data: visionResult.sentences
             })}\n\n`);
+    
+            // 5. GPT 분석 시작
+            const grammarPromise = this.grammarService.findMostNaturalSentence(visionResult.sentences);
             
-            // 3. 문장이 없는 경우 즉시 종료
-            if (!visionResult.sentences.length) {
-                res.write(`data: ${JSON.stringify({
-                    type: 'error',
-                    message: 'No text detected'
-                })}\n\n`);
-                return res.end();
-            }
-
-            // 4. GPT 분석 및 즉시 응답
-            const grammarResult = await this.grammarService.findMostNaturalSentence(
-                visionResult.sentences
-            );
+            // 6. 중간 상태 전송
+            res.write(`data: ${JSON.stringify({ type: 'analyzing' })}\n\n`);
+            
+            // 7. GPT 결과 수신 및 전송
+            const grammarResult = await grammarPromise;
             res.write(`data: ${JSON.stringify({
-                type: 'analysis',
-                data: {
-                    correctIndex: grammarResult.correctIndex,
-                    correctSentence: grammarResult.correctSentence,
-                    sentenceScores: grammarResult.sentenceScores
-                }
+                type: 'complete',
+                data: grammarResult
             })}\n\n`);
-
-            return res.end();
-
+            
         } catch (error) {
-            this.logger.error('Analysis error:', error);
             res.write(`data: ${JSON.stringify({
                 type: 'error',
-                message: 'Analysis failed'
+                message: error.message
             })}\n\n`);
-            return res.end();
         }
+        
+        res.end();
     }
 
     @Get('result/:jobId')
