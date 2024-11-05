@@ -5,7 +5,7 @@ import { GrammarService } from '../grammar/grammar.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull'
-import sharp from 'sharp';
+import * as sharp from 'sharp';
 
 @Controller('image-processing')
 export class ImageProcessingController {
