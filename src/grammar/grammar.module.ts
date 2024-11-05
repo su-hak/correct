@@ -17,6 +17,6 @@ import { GrammarLearningService } from './grammar-Learning.service';
   ],
   controllers: [GrammarController],
   providers: [GrammarService, GrammarLearningService],
-  exports: [GrammarService]
+  exports: [GrammarService, GrammarLearningService]
 })
 export class GrammarModule {}
