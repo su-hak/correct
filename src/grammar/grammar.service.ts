@@ -32,15 +32,13 @@ export class GrammarService {
           ],
           temperature: 0,
           max_tokens: 1,
-          presence_penalty: -2.0,
-          frequency_penalty: -2.0
         },
         {
           headers: {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 1000
+          timeout: 1500
         }
       );
 
