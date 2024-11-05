@@ -6,7 +6,7 @@ import { GrammarLearningService } from './grammar-Learning.service';
 @Injectable()
 export class GrammarService {
   private readonly openaiApiKey: string;
-  
+
   private readonly logger = new Logger(GrammarService.name);
 
   constructor(
@@ -22,22 +22,25 @@ export class GrammarService {
     sentenceScores: number[];
   }> {
     try {
-      // 학습된 데이터에서 먼저 검색
-      const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
-      
-      if (learningResult.found) {
-        return {
-          correctSentence: learningResult.correctSentence!,
-          correctIndex: learningResult.correctIndex!,
-          sentenceScores: learningResult.sentenceScores!
-        };
+      // 학습 데이터 검색 시도 중 에러가 나도 계속 진행
+      try {
+        const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
+        if (learningResult.found) {
+          return {
+            correctSentence: learningResult.correctSentence!,
+            correctIndex: learningResult.correctIndex!,
+            sentenceScores: learningResult.sentenceScores!
+          };
+        }
+      } catch (err) {
+        this.logger.warn('Learning service error, proceeding with OpenAI:', err.message);
       }
 
       // 학습된 데이터에 없는 경우 OpenAI API 호출
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-4-mini",
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
