@@ -1,6 +1,6 @@
 import { ConfigService } from "@nestjs/config";
 import { GrammarLearning } from "./entities/grammar-Learning.entity";
-import { Repository } from "typeorm";
+import { MoreThan, Repository } from "typeorm";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 
@@ -8,45 +8,49 @@ import { InjectRepository } from "@nestjs/typeorm";
 export class GrammarLearningService {
   private readonly logger = new Logger(GrammarLearningService.name);
   private readonly similarityThreshold = 0.8;
+  private readonly cache = new Map<string, GrammarLearning>();
+  private readonly frequentPatterns = new Map<string, string>();
 
   constructor(
     @InjectRepository(GrammarLearning)
     private learningRepository: Repository<GrammarLearning>
-  ) {}
-
-  // calculateSimilarity를 public으로 변경
-  public calculateSimilarity(str1: string, str2: string): number {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-    
-    if (longer.length === 0) return 1.0;
-    
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
+  ) {
+    this.initializeCache();
   }
 
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => 
-      Array(str1.length + 1).fill(null)
-    );
+  private async initializeCache() {
+    try {
+      // 자주 사용되는 항목만 캐싱
+      const frequentEntries = await this.learningRepository.find({
+        where: { useCount: MoreThan(5) },
+        order: { useCount: 'DESC' },
+        take: 1000
+      });
 
-    for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
-    for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
-
-    for (let j = 1; j <= str2.length; j++) {
-      for (let i = 1; i <= str1.length; i++) {
-        const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1,
-          matrix[j - 1][i] + 1,
-          matrix[j - 1][i - 1] + indicator
+      frequentEntries.forEach(entry => {
+        this.cache.set(this.generateKey(entry.originalText), entry);
+        // 패턴 캐싱
+        this.frequentPatterns.set(
+          this.generatePattern(entry.originalText),
+          entry.correctedText
         );
-      }
+      });
+    } catch (error) {
+      this.logger.error('Cache initialization failed:', error);
     }
-    return matrix[str2.length][str1.length];
   }
 
-  // findSimilarCorrection 메서드 추가
+  private generateKey(text: string): string {
+    return text.replace(/\s+/g, '').toLowerCase();
+  }
+
+  private generatePattern(text: string): string {
+    return text
+      .replace(/[은는이가을를에서도의로]\s*/g, '*')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   public async findSimilarCorrection(sentences: string[]): Promise<{
     found: boolean;
     correctSentence?: string;
@@ -54,14 +58,22 @@ export class GrammarLearningService {
     sentenceScores?: number[];
   }> {
     try {
-      const similarEntry = await this.findSimilarSentence(sentences[0]);
-      
-      if (similarEntry) {
-        this.logger.debug('Found similar sentence in learned data');
+      const originalText = sentences[0];
+      const key = this.generateKey(originalText);
+      const pattern = this.generatePattern(originalText);
+
+      // 1. 캐시에서 직접 매치 확인
+      const cachedEntry = this.cache.get(key);
+      if (cachedEntry) {
+        return this.createResponse(sentences, cachedEntry);
+      }
+
+      // 2. 패턴 매칭
+      const patternMatch = this.frequentPatterns.get(pattern);
+      if (patternMatch) {
         const correctIndex = sentences.findIndex(s => 
-          this.calculateSimilarity(s, similarEntry.correctedText) >= 0.9
+          this.generateKey(s) === this.generateKey(patternMatch)
         );
-        
         if (correctIndex !== -1) {
           return {
             found: true,
@@ -71,7 +83,22 @@ export class GrammarLearningService {
           };
         }
       }
-      
+
+      // 3. DB에서 빠른 검색
+      const similarEntry = await this.learningRepository
+        .createQueryBuilder('grammar')
+        .where('LOWER(grammar.originalText) LIKE :pattern', { 
+          pattern: `%${pattern.replace(/\*/g, '%')}%` 
+        })
+        .orderBy('grammar.useCount', 'DESC')
+        .getOne();
+
+      if (similarEntry) {
+        // 캐시에 추가
+        this.cache.set(key, similarEntry);
+        return this.createResponse(sentences, similarEntry);
+      }
+
       return { found: false };
     } catch (error) {
       this.logger.error(`Error finding similar correction: ${error.message}`);
@@ -79,46 +106,62 @@ export class GrammarLearningService {
     }
   }
 
-  // findSimilarSentence를 private로 유지
-  private async findSimilarSentence(text: string): Promise<GrammarLearning | null> {
-    const allEntries = await this.learningRepository.find();
-    
-    for (const entry of allEntries) {
-      const similarity = this.calculateSimilarity(text, entry.originalText);
-      if (similarity >= this.similarityThreshold) {
-        return entry;
-      }
+  private createResponse(sentences: string[], entry: GrammarLearning) {
+    const correctIndex = sentences.findIndex(s => 
+      this.generateKey(s) === this.generateKey(entry.correctedText)
+    );
+
+    if (correctIndex !== -1) {
+      return {
+        found: true,
+        correctSentence: sentences[correctIndex],
+        correctIndex,
+        sentenceScores: Array(sentences.length).fill(0)
+          .map((_, i) => i === correctIndex ? 100 : 0)
+      };
     }
-    return null;
+
+    return { found: false };
   }
 
   public async learnCorrection(
-    originalText: string, 
-    correctedText: string, 
+    originalText: string,
+    correctedText: string,
     alternativeSentences: string[] = [],
     confidence: number = 1.0
   ): Promise<void> {
-    try {
-      const existingEntry = await this.findSimilarSentence(originalText);
+    const key = this.generateKey(originalText);
+    const pattern = this.generatePattern(originalText);
 
-      if (existingEntry) {
-        existingEntry.useCount += 1;
-        if (confidence > existingEntry.confidence) {
-          existingEntry.correctedText = correctedText;
-          existingEntry.confidence = confidence;
-          existingEntry.alternativeSentences = alternativeSentences;
+    try {
+      let entry = this.cache.get(key);
+      if (!entry) {
+        entry = await this.learningRepository.findOne({
+          where: { originalText }
+        });
+      }
+
+      if (entry) {
+        entry.useCount += 1;
+        if (confidence > entry.confidence) {
+          entry.correctedText = correctedText;
+          entry.confidence = confidence;
+          entry.alternativeSentences = alternativeSentences;
         }
-        await this.learningRepository.save(existingEntry);
       } else {
-        const newEntry = this.learningRepository.create({
+        entry = this.learningRepository.create({
           originalText,
           correctedText,
           confidence,
           alternativeSentences,
           useCount: 1
         });
-        await this.learningRepository.save(newEntry);
       }
+
+      const savedEntry = await this.learningRepository.save(entry);
+      this.cache.set(key, savedEntry);
+      this.frequentPatterns.set(pattern, correctedText);
+
     } catch (error) {
       this.logger.error(`Error learning correction: ${error.message}`);
     }
