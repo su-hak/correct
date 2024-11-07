@@ -10,6 +10,7 @@ import { BullModule } from '@nestjs/bull';
 import { ImageProcessingModule } from './image-processing/image-processing.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { CreateGrammarLearning1699262400000 } from './migrations/1699262400000-CreateGrammarLearning';
+import { CreateGrammarLearning1699353600000 } from './migrations/1699353600000-CreateGrammarLearning';
 
 @Module({
   imports: [
@@ -46,7 +47,7 @@ import { CreateGrammarLearning1699262400000 } from './migrations/1699262400000-C
             password: configService.get('DB_PASSWORD'),
             database: configService.get('DB_NAME'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
-            migrations: [CreateGrammarLearning1699262400000],
+            migrations: [CreateGrammarLearning1699353600000],
             migrationsRun: true, // 앱 시작 시 자동으로 마이그레이션 실행
             ssl: {
               rejectUnauthorized: false
