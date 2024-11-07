@@ -6,13 +6,13 @@ export class GrammarLearning {
   id: number;
 
   @Column('text')
-  originalText: string;
-
-  @Column('text')
   correctedText: string;
 
-  @Column('float')
-  confidence: number;
+  @Column('text')
+  originalText: string;
+
+  @Column('simple-array', { nullable: true })
+  patterns: string[];
 
   @Column('int', { default: 1 })
   useCount: number;

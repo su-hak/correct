@@ -8,67 +8,46 @@ import { InjectRepository } from "@nestjs/typeorm";
 export class GrammarLearningService {
   private readonly logger = new Logger(GrammarLearningService.name);
   private readonly cache = new Map<string, GrammarLearning>();
-  private readonly patternCache = new Map<string, GrammarLearning>();
+  private readonly patternCache = new Map<string, string>();
+  private readonly frequentPatterns = new Map<string, {
+    sentence: string,
+    count: number,
+    patterns: string[]
+  }>();
 
   constructor(
     @InjectRepository(GrammarLearning)
-    private learningRepository: Repository<GrammarLearning>
-  ) {
-    this.initializeCache();
-  }
-
-  private async initializeCache() {
-    try {
-      const allEntries = await this.learningRepository.find({
-        order: { useCount: 'DESC' }
-      });
-
-      allEntries.forEach(entry => {
-        // 정확한 매치를 위한 캐시
-        const exactKey = this.generateExactKey(entry.originalText);
-        this.cache.set(exactKey, entry);
-
-        // 패턴 매치를 위한 캐시
-        const patternKey = this.generatePatternKey(entry.originalText);
-        this.patternCache.set(patternKey, entry);
-      });
-
-      this.logger.log(`Cache initialized with ${allEntries.length} entries`);
-    } catch (error) {
-      this.logger.error('Cache initialization failed:', error);
-    }
-  }
+    private readonly learningRepository: Repository<GrammarLearning>
+  ) {}
 
   private generateExactKey(text: string): string {
-    return text
-      .replace(/\s+/g, '')  // 공백 제거
-      .toLowerCase();       // 소문자 변환
+    return text.replace(/\s+/g, '').toLowerCase();
   }
 
-  private generatePatternKey(text: string): string {
-    return text
-      .replace(/[은는이가을를에서도의로]\s*/g, '') // 조사 제거
-      .replace(/[.,!?]/g, '')  // 문장부호 제거
-      .replace(/\s+/g, '')     // 공백 제거
-      .toLowerCase();          // 소문자 변환
-  }
-
-  private createResponse(sentences: string[], entry: GrammarLearning) {
-    const correctIndex = sentences.findIndex(s => 
-      this.generateExactKey(s) === this.generateExactKey(entry.correctedText)
+  private generatePattern(text: string): string[] {
+    const patterns = [];
+    
+    // 1. 기본 패턴 (조사 제거)
+    patterns.push(
+      text.replace(/[은는이가을를에서도의로]\s*/g, '*')
     );
 
-    if (correctIndex !== -1) {
-      return {
-        found: true,
-        correctSentence: sentences[correctIndex],
-        correctIndex,
-        sentenceScores: Array(sentences.length).fill(0)
-          .map((_, i) => i === correctIndex ? 100 : 0)
-      };
-    }
+    // 2. 문장 구조 패턴
+    const structurePattern = text
+      .split(' ')
+      .map(word => {
+        if (word.match(/[다요]$/)) return 'V';
+        if (word.match(/[은는이가을를에서도의로]$/)) return 'N';
+        return '*';
+      })
+      .join(' ');
+    patterns.push(structurePattern);
 
-    return { found: false };
+    // 3. 어미 패턴
+    const endingPattern = text.match(/[다요습니까]$/)?.[0] || '';
+    if (endingPattern) patterns.push(`*${endingPattern}`);
+
+    return patterns;
   }
 
   public async findSimilarCorrection(sentences: string[]): Promise<{
@@ -79,85 +58,102 @@ export class GrammarLearningService {
   }> {
     try {
       const originalText = sentences[0];
-      console.time('cache-lookup');
-
-      // 1. 정확한 매치 시도
-      const exactKey = this.generateExactKey(originalText);
-      const exactMatch = this.cache.get(exactKey);
-      if (exactMatch) {
-        console.timeEnd('cache-lookup');
-        console.log('Exact cache hit');
-        return this.createResponse(sentences, exactMatch);
+      const patterns = this.generatePattern(originalText);
+      
+      // 패턴 매칭으로 유사한 문장 찾기
+      for (const pattern of patterns) {
+        const match = this.frequentPatterns.get(pattern);
+        if (match) {
+          const correctIndex = sentences.findIndex(s => 
+            this.generateExactKey(s) === this.generateExactKey(match.sentence)
+          );
+          
+          if (correctIndex !== -1) {
+            return {
+              found: true,
+              correctSentence: sentences[correctIndex],
+              correctIndex,
+              sentenceScores: Array(sentences.length).fill(0)
+                .map((_, i) => i === correctIndex ? 100 : 0)
+            };
+          }
+        }
       }
 
-      // 2. 패턴 매치 시도
-      const patternKey = this.generatePatternKey(originalText);
-      const patternMatch = this.patternCache.get(patternKey);
-      if (patternMatch) {
-        console.timeEnd('cache-lookup');
-        console.log('Pattern cache hit');
-        return this.createResponse(sentences, patternMatch);
-      }
-
-      console.timeEnd('cache-lookup');
       return { found: false };
-
     } catch (error) {
       this.logger.error(`Error finding similar correction: ${error.message}`);
       return { found: false };
     }
   }
 
-  public async learnCorrection(
-    originalText: string,
-    correctedText: string,
-    alternativeSentences: string[] = []
-  ): Promise<void> {
+  public async learnCorrection(correctSentence: string, allSentences?: string[]): Promise<void> {
     try {
-      const exactKey = this.generateExactKey(originalText);
-      const patternKey = this.generatePatternKey(originalText);
+      if (
+        correctSentence.includes('선택') || 
+        correctSentence.includes('올바른') ||
+        correctSentence.length < 4
+      ) {
+        return;
+      }
 
+      const patterns = this.generatePattern(correctSentence);
+      
+      // 패턴 빈도 수 증가
+      patterns.forEach(pattern => {
+        const existing = this.frequentPatterns.get(pattern) || {
+          sentence: correctSentence,
+          count: 0,
+          patterns: patterns
+        };
+        
+        existing.count += 1;
+        this.frequentPatterns.set(pattern, existing);
+      });
+
+      // DB에 저장
       let entry = await this.learningRepository.findOne({
-        where: { originalText }
+        where: { correctedText: correctSentence }
       });
 
       if (entry) {
         entry.useCount += 1;
-        entry.correctedText = correctedText;
-        entry.alternativeSentences = alternativeSentences;
+        entry.patterns = patterns;
       } else {
         entry = this.learningRepository.create({
-          originalText,
-          correctedText,
-          alternativeSentences,
+          correctedText: correctSentence,
+          originalText: correctSentence,
+          patterns: patterns,
+          alternativeSentences: allSentences?.filter(s => s !== correctSentence) || [],
           useCount: 1
         });
       }
 
       const savedEntry = await this.learningRepository.save(entry);
-      
-      // 캐시 업데이트
-      this.cache.set(exactKey, savedEntry);
-      this.patternCache.set(patternKey, savedEntry);
+      this.cache.set(this.generateExactKey(correctSentence), savedEntry);
 
-      this.logger.log(`Learned correction for: ${originalText}`);
+      this.logger.log(`Learned patterns for: ${correctSentence}`);
     } catch (error) {
       this.logger.error(`Error learning correction: ${error.message}`);
     }
   }
 
-
-  // 캐시 상태 확인을 위한 메서드
   public getCacheStats() {
     return {
       exactMatches: this.cache.size,
-      patternMatches: this.patternCache.size,
-      cacheEntries: Array.from(this.cache.entries()).map(([key, value]) => ({
-        key,
-        originalText: value.originalText,
-        correctedText: value.correctedText,
-        useCount: value.useCount
-      }))
+      patternMatches: this.frequentPatterns.size,
+      cacheEntries: Array.from(this.cache.entries())
+        .filter(([_, value]) => 
+          !value.correctedText.includes('선택') &&
+          !value.correctedText.includes('올바른') &&
+          value.correctedText.length >= 4
+        )
+        .map(([key, value]) => ({
+          key,
+          correctSentence: value.correctedText,
+          patterns: value.patterns,
+          useCount: value.useCount
+        }))
     };
   }
 }

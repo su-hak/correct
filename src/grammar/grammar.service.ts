@@ -63,7 +63,6 @@ export class GrammarService {
 
       // 비동기로 학습 처리
       this.grammarLearningService.learnCorrection(
-        sentences[0],
         sentences[validIndex],
         sentences
       ).catch(err => this.logger.error('Learning error:', err));
