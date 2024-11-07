@@ -65,8 +65,7 @@ export class GrammarService {
       this.grammarLearningService.learnCorrection(
         sentences[0],
         sentences[validIndex],
-        sentences,
-        1.0
+        sentences
       ).catch(err => this.logger.error('Learning error:', err));
 
       return {
