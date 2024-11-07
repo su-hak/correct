@@ -54,7 +54,7 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 2000  // 타임아웃 2초로 단축
+          timeout: 5000 
         }
       );
 
