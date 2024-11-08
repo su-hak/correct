@@ -18,7 +18,48 @@ export class GrammarLearningService {
   constructor(
     @InjectRepository(GrammarLearning)
     private readonly learningRepository: Repository<GrammarLearning>
-  ) {}
+  ) {
+    this.initializeCache();  // 생성자에서 캐시 초기화 호출
+  }
+
+  // 캐시 초기화 메서드 추가
+  private async initializeCache() {
+    try {
+      // DB에서 모든 학습 데이터 로드
+      const allEntries = await this.learningRepository.find({
+        order: {
+          useCount: 'DESC',  // 사용 빈도순으로 정렬
+        }
+      });
+
+      this.logger.log(`Loading ${allEntries.length} entries from database`);
+
+      // 캐시 초기화
+      allEntries.forEach(entry => {
+        // 기본 캐시에 저장
+        this.cache.set(this.generateExactKey(entry.correctedText), entry);
+
+        // 패턴 캐시 및 빈도수 저장
+        if (entry.patterns) {
+          entry.patterns.forEach(pattern => {
+            const existing = this.frequentPatterns.get(pattern) || {
+              sentence: entry.correctedText,
+              count: 0,
+              patterns: entry.patterns
+            };
+            existing.count = entry.useCount;
+            this.frequentPatterns.set(pattern, existing);
+          });
+        }
+      });
+
+      this.logger.log(`Cache initialized with ${this.cache.size} entries`);
+      this.logger.log(`Pattern cache initialized with ${this.frequentPatterns.size} patterns`);
+
+    } catch (error) {
+      this.logger.error('Failed to initialize cache:', error);
+    }
+  }
 
   private generateExactKey(text: string): string {
     return text.replace(/\s+/g, '').toLowerCase();
@@ -138,7 +179,11 @@ export class GrammarLearningService {
     }
   }
 
-  public getCacheStats() {
+  // getCacheStats 메서드 수정
+  public async getCacheStats() {
+    // DB에서 최신 데이터 다시 로드
+    await this.initializeCache();
+
     return {
       exactMatches: this.cache.size,
       patternMatches: this.frequentPatterns.size,
@@ -154,6 +199,7 @@ export class GrammarLearningService {
           patterns: value.patterns,
           useCount: value.useCount
         }))
+        .sort((a, b) => b.useCount - a.useCount)  // 사용 빈도순 정렬
     };
   }
 }
