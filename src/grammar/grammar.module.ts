@@ -7,6 +7,8 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GrammarLearning } from './entities/grammar-Learning.entity';
 import { GrammarLearningService } from './grammar-Learning.service';
+import { GrammarAdminController } from './grammarAdmin.controller';
+import { GrammarSeedService } from './grammarSeed.service';
 
 @Module({
   imports: [
@@ -15,8 +17,19 @@ import { GrammarLearningService } from './grammar-Learning.service';
     ConfigModule, // ConfigService를 사용하기 위해 필요
     TypeOrmModule.forFeature([GrammarLearning])
   ],
-  controllers: [GrammarController],
-  providers: [GrammarService, GrammarLearningService],
-  exports: [GrammarService, GrammarLearningService]
+  controllers: [
+    GrammarController,
+    GrammarAdminController
+  ],
+  providers: [
+    GrammarService, 
+    GrammarLearningService,
+    GrammarSeedService
+  ],
+  exports: [
+    GrammarService, 
+    GrammarLearningService,
+    GrammarSeedService,
+  ]
 })
 export class GrammarModule {}
