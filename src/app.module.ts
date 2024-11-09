@@ -24,6 +24,10 @@ import { CreateGrammarLearning1699353600000 } from './migrations/1699353600000-C
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
+
+        const redisUrl = configService.get('REDIS_URL');
+        const redisConfig = redisUrl ? new URL(redisUrl) : null;
+
         if (process.env.JAWSDB_MARIA_URL) {
           const matches = process.env.JAWSDB_MARIA_URL.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
           return {
@@ -48,13 +52,27 @@ import { CreateGrammarLearning1699353600000 } from './migrations/1699353600000-C
             database: configService.get('DB_NAME'),
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             migrations: [CreateGrammarLearning1699353600000],
-            migrationsRun: true, // 앱 시작 시 자동으로 마이그레이션 실행
+            migrationsRun: false, // 앱 시작 시 자동으로 마이그레이션 실행
             ssl: {
               rejectUnauthorized: false
             },
             synchronize: configService.get('DB_SYNC') === 'true',
             logging: true,
-            logger: 'advanced-console'
+            logger: 'advanced-console',
+            // MariaDB 전용 pool 설정
+            pool: {
+              min: 0,      // 최소 연결 수
+              max: 10,     // 최대 연결 수
+              idle: 10000, // 유휴 연결 타임아웃 (ms)
+              acquire: 30000 // 연결 획득 타임아웃 (ms)
+            },
+            cache: redisConfig ? {
+              type: "redis",
+              options: {
+                url: redisUrl
+              },
+              duration: 60000 // 1분
+            } : false
           };
         }
       },
