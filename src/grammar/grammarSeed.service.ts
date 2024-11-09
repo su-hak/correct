@@ -99,38 +99,73 @@ export class GrammarSeedService {
       );
 
       const content = response.data.choices[0].message.content;
+      this.logger.log('Raw OpenAI response:', content); // 원본 응답 로깅
+
       const sentences = this.parseSentences(content);
+      this.logger.log(`Parsed ${sentences.length} sentences`); // 파싱된 문장 수 로깅
+
+      if (sentences.length === 0) {
+        this.logger.warn('No sentences were parsed from the response');
+        throw new Error('No sentences generated');
+      }
 
       // 생성된 문장들을 학습 데이터로 저장
+      const savedSentences = [];
       for (const sentence of sentences) {
         await this.grammarLearningService.learnCorrection(sentence);
-        // Rate limiting을 위한 delay
+        savedSentences.push(sentence);
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      return { 
+      const result = { 
         success: true, 
         patternExample: pattern.example,
-        generatedCount: sentences.length,
-        sentences
+        generatedCount: savedSentences.length,
+        sentences: savedSentences,
+        rawResponse: content // 디버깅을 위해 원본 응답도 포함
       };
+
+      this.logger.log(`Successfully generated and saved ${savedSentences.length} sentences`);
+      return result;
 
     } catch (error) {
       this.logger.error(`Error generating batch examples: ${error.message}`);
+      if (error.response?.data) {
+        this.logger.error('OpenAI API Error:', error.response.data);
+      }
       throw error;
     }
   }
 
   private parseSentences(content: string): string[] {
-    return content
-      .split('\n')
-      .map(line => line.trim())
+    if (!content) {
+      this.logger.warn('Empty content received');
+      return [];
+    }
+
+    // 줄바꿈 처리 개선
+    const lines = content.split(/[\n\r]+/);
+    this.logger.log(`Split into ${lines.length} lines`);
+
+    const sentences = lines
+      .map(line => {
+        // 번호, 불릿, 특수문자 등 제거
+        return line
+          .replace(/^\d+\.\s*/, '')  // 숫자와 점으로 시작하는 경우
+          .replace(/^[-•※]\s*/, '')  // 불릿으로 시작하는 경우
+          .trim();
+      })
       .filter(line => {
-        return line && 
-               !line.match(/^\d+\./) && 
-               !line.match(/^-/) &&
-               !line.match(/^•/) &&
-               line.length > 1;
+        const isValid = line && line.length > 1;
+        if (!isValid && line) {
+          this.logger.warn(`Filtered out line: "${line}"`);
+        }
+        return isValid;
       });
+
+    this.logger.log(`Parsed ${sentences.length} valid sentences`);
+    sentences.forEach((s, i) => this.logger.debug(`Sentence ${i + 1}: ${s}`));
+
+    return sentences;
   }
 }
