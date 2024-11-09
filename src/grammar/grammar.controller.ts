@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Delete } from '@nestjs/common';
 import { GrammarService } from './grammar.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -42,5 +42,42 @@ export class GrammarController {
   })
   getCacheStats() {
     return this.grammarLearningService.getCacheStats();
+  }
+
+  @Get('cache/inspect/:sentence')
+  @ApiOperation({ summary: '특정 문장의 캐시 상태 상세 확인' })
+  @ApiResponse({
+    status: 200,
+    description: '문장의 캐시 상태 정보',
+    schema: {
+      example: {
+        exists: true,
+        entry: {
+          correctedText: "안녕하세요",
+          patterns: ["* 하세요", "V"],
+          useCount: 5
+        },
+        patterns: ["* 하세요", "V"],
+        matchedSentences: ["안녕하세요", "잘 가세요"]
+      }
+    }
+  })
+  async inspectCache(@Param('sentence') sentence: string) {
+    return this.grammarLearningService.inspectCache(sentence);
+  }
+
+  @Delete('cache/:sentence')
+  @ApiOperation({ summary: '캐시에서 특정 문장 수동 제거' })
+  @ApiResponse({
+    status: 200,
+    description: '캐시 제거 결과',
+    schema: {
+      example: {
+        success: true
+      }
+    }
+  })
+  async removeCache(@Param('sentence') sentence: string) {
+    return this.grammarLearningService.removeCacheEntry(sentence);
   }
 }

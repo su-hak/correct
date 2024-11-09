@@ -8,7 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 export class GrammarLearningService {
   private readonly logger = new Logger(GrammarLearningService.name);
   private readonly cache = new Map<string, GrammarLearning>();
-  private readonly patternCache = new Map<string, string>();
+  private readonly patternCache = new Map<string, Set<string>>();
   private readonly frequentPatterns = new Map<string, {
     sentence: string,
     count: number,
@@ -21,7 +21,7 @@ export class GrammarLearningService {
   ) {
     this.initializeCache();  // 생성자에서 캐시 초기화 호출
   }
-
+  
   // 캐시 초기화 메서드 추가
   private async initializeCache() {
     try {
@@ -201,5 +201,57 @@ export class GrammarLearningService {
         }))
         .sort((a, b) => b.useCount - a.useCount)  // 사용 빈도순 정렬
     };
+  }
+  
+  public async inspectCache(sentence: string) {
+    const key = this.generateExactKey(sentence);
+    const entry = this.cache.get(key);
+    const patterns = entry?.patterns || [];
+    
+    return {
+      exists: !!entry,
+      entry,
+      patterns,
+      matchedSentences: patterns.map(pattern => 
+        Array.from(this.patternCache.get(pattern) || [])
+      ).flat()
+    };
+  }
+
+  // 캐시에서 특정 문장 수동 제거
+  public async removeCacheEntry(sentence: string) {
+    try {
+      const key = this.generateExactKey(sentence);
+      const entry = this.cache.get(key);
+
+      if (entry) {
+        // 캐시에서 제거
+        this.cache.delete(key);
+
+        // 패턴 캐시에서 제거
+        if (entry.patterns) {
+          entry.patterns.forEach(pattern => {
+            const sentences = this.patternCache.get(pattern);
+            if (sentences) {
+              sentences.delete(sentence); // Set의 delete 메서드 사용
+              if (sentences.size === 0) { // Set의 size 속성 사용
+                this.patternCache.delete(pattern);
+                this.frequentPatterns.delete(pattern);
+              }
+            }
+          });
+        }
+
+        // DB에서 삭제
+        await this.learningRepository.delete({ correctedText: sentence });
+        
+        this.logger.log(`Admin removed cache entry: ${sentence}`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.logger.error(`Error removing cache entry: ${error.message}`);
+      throw error;
+    }
   }
 }
