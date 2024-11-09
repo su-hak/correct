@@ -80,7 +80,7 @@ export class GrammarSeedService {
           messages: [
             {
               role: "system",
-              content: "당신은 한국어 문장 생성 전문가입니다. 주어진 패턴에 맞는 자연스러운 한국어 문장을 생성해주세요."
+              content: "당신은 한국어 문장 생성 전문가입니다. 주어진 패턴에 맞는 자연스럽고 짧은 한국어 문장을 생성해주세요."
             },
             {
               role: "user",
