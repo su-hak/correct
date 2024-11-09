@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get, Param, Delete } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Delete, BadRequestException } from '@nestjs/common';
 import { GrammarService } from './grammar.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
@@ -9,10 +9,10 @@ export class GrammarController {
   constructor(
     private grammarService: GrammarService,
     private readonly grammarLearningService: GrammarLearningService
-  ) {}
+  ) { }
 
   @Post('check')
-  async checkGrammar(@Body('sentences') sentences: string[]): Promise<{ 
+  async checkGrammar(@Body('sentences') sentences: string[]): Promise<{
     correctSentence: string;
     correctIndex: number;
     sentenceScores: number[];
@@ -83,12 +83,6 @@ export class GrammarController {
 
   @Post('cache/:sentence')
   @ApiOperation({ summary: '캐시에 특정 문장 수동 추가' })
-  @ApiParam({
-    name: 'sentence',
-    required: true,
-    description: '캐시에 추가할 문장',
-    example: '아카라이브'
-  })
   @ApiResponse({
     status: 200,
     description: '캐시 추가 결과',
@@ -98,19 +92,10 @@ export class GrammarController {
       }
     }
   })
-  async addCache(
-    @Body() data: { 
-      sentence: string; 
-      useCount?: number;
-      alternativeSentences?: string[];
+  async addCache(@Param('sentence') sentence: string) {
+    if (!sentence) {
+      throw new BadRequestException('sentence is required');
     }
-  ) {
-    return this.grammarLearningService.addCacheEntry(
-      data.sentence, 
-      {
-        useCount: data.useCount,
-        alternativeSentences: data.alternativeSentences
-      }
-    );
+    return this.grammarLearningService.addCacheEntry(sentence);
   }
 }
