@@ -101,24 +101,43 @@ export class GrammarLearningService {
       const originalText = sentences[0];
       const patterns = this.generatePattern(originalText);
       
-      // 패턴 매칭으로 유사한 문장 찾기
-      for (const pattern of patterns) {
+      // 패턴 우선순위 설정
+      const priorityPatterns = patterns.sort((a, b) => {
+        // 더 구체적인 패턴에 높은 우선순위
+        const specificityA = (a.match(/\*/g) || []).length;
+        const specificityB = (b.match(/\*/g) || []).length;
+        return specificityA - specificityB;
+      });
+
+      // 캐시된 패턴 매칭 최적화
+      const matchingScores = new Map<number, number>();
+      
+      for (const pattern of priorityPatterns) {
         const match = this.frequentPatterns.get(pattern);
-        if (match) {
-          const correctIndex = sentences.findIndex(s => 
-            this.generateExactKey(s) === this.generateExactKey(match.sentence)
-          );
-          
-          if (correctIndex !== -1) {
-            return {
-              found: true,
-              correctSentence: sentences[correctIndex],
-              correctIndex,
-              sentenceScores: Array(sentences.length).fill(0)
-                .map((_, i) => i === correctIndex ? 100 : 0)
-            };
-          }
+        if (match && match.count > 5) { // 사용 빈도가 높은 패턴만 고려
+          sentences.forEach((sentence, index) => {
+            const currentKey = this.generateExactKey(sentence);
+            const matchKey = this.generateExactKey(match.sentence);
+            
+            if (currentKey === matchKey) {
+              matchingScores.set(index, (matchingScores.get(index) || 0) + 100);
+            }
+          });
         }
+      }
+
+      if (matchingScores.size > 0) {
+        const entries = Array.from(matchingScores.entries());
+        const bestMatch = entries.reduce((a, b) => 
+          (a[1] > b[1] ? a : b)
+        );
+
+        return {
+          found: true,
+          correctSentence: sentences[bestMatch[0]],
+          correctIndex: bestMatch[0],
+          sentenceScores: sentences.map((_, i) => matchingScores.get(i) || 0)
+        };
       }
 
       return { found: false };

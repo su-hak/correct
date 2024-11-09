@@ -17,12 +17,6 @@ export class VisionService {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
   }
 
-  private isValidKoreanSentence(text: string): boolean {
-    // 기본적인 검증만 수행
-    return /[가-힣]/.test(text) && // 한글 포함
-           !text.includes('올바른 문장을 선택해 주세요');
-  }
-
   async detectTextInImage(imageBuffer: Buffer): Promise<{
     sentences: string[];
     boundingBoxes: any[];
@@ -31,7 +25,6 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
-      // 이미지 최적화
       const optimizedBuffer = await sharp(imageBuffer)
         .resize(1024, null, { withoutEnlargement: true })
         .jpeg({ quality: 85 })
@@ -57,11 +50,27 @@ export class VisionService {
         return this.getEmptyResult();
       }
 
-      // 문장 추출 및 간단한 필터링
-      const sentences = textAnnotations[0].description
-        .split('\n')
-        .map(s => s.trim())
-        .filter(s => s && this.isValidKoreanSentence(s));
+      // '올바른 문장을 선택해 주세요' 찾기
+      const fullText = textAnnotations[0].description;
+      const lines = fullText.split('\n');
+      const titleIndex = lines.findIndex(line => 
+        line.includes('올바른 문장을 선택해 주세요') && 
+        this.getConfidenceScore(textAnnotations, line) >= 0.7
+      );
+
+      if (titleIndex === -1) {
+        return this.getEmptyResult();
+      }
+
+      // 타이틀 이후 5개 문장만 추출
+      const sentences = lines
+        .slice(titleIndex + 1)
+        .filter(line => 
+          line.trim() && 
+          this.isValidKoreanSentence(line) &&
+          this.getConfidenceScore(textAnnotations, line) >= 0.7
+        )
+        .slice(0, 5);
 
       if (sentences.length === 0) {
         return this.getEmptyResult();
@@ -70,9 +79,14 @@ export class VisionService {
       // 문법 평가
       const grammarResult = await this.grammarService.findMostNaturalSentence(sentences);
 
+      // 해당하는 바운딩 박스만 포함
+      const relevantBoxes = textAnnotations.slice(1)
+        .filter(t => sentences.includes(t.description))
+        .map(t => t.boundingPoly?.vertices || []);
+
       return {
         sentences,
-        boundingBoxes: textAnnotations.slice(1).map(t => t.boundingPoly?.vertices || []),
+        boundingBoxes: relevantBoxes,
         correctIndex: grammarResult.correctIndex,
         correctSentence: grammarResult.correctSentence,
         sentenceScores: grammarResult.sentenceScores
@@ -82,6 +96,17 @@ export class VisionService {
       this.logger.error('Vision API error:', error);
       return this.getEmptyResult();
     }
+  }
+
+  private getConfidenceScore(annotations: any[], text: string): number {
+    const annotation = annotations.find(a => a.description === text);
+    return annotation?.confidence || 0;
+  }
+
+  private isValidKoreanSentence(text: string): boolean {
+    return /[가-힣]/.test(text) && 
+           !text.includes('올바른 문장을 선택해 주세요') &&
+           text.length >= 2;
   }
 
   private getEmptyResult() {
