@@ -80,4 +80,21 @@ export class GrammarController {
   async removeCache(@Param('sentence') sentence: string) {
     return this.grammarLearningService.removeCacheEntry(sentence);
   }
+
+  @Post('cache')
+  async addCache(
+    @Body() data: { 
+      sentence: string; 
+      useCount?: number;
+      alternativeSentences?: string[];
+    }
+  ) {
+    return this.grammarLearningService.addCacheEntry(
+      data.sentence, 
+      {
+        useCount: data.useCount,
+        alternativeSentences: data.alternativeSentences
+      }
+    );
+  }
 }

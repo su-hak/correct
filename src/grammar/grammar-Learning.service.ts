@@ -254,4 +254,51 @@ export class GrammarLearningService {
       throw error;
     }
   }
+
+  public async addCacheEntry(
+    sentence: string,
+    options: { 
+      useCount?: number;
+      alternativeSentences?: string[];
+    } = {}
+  ) {
+    try {
+      const key = this.generateExactKey(sentence);
+      
+      // 이미 존재하는 경우 업데이트
+      if (this.cache.has(key)) {
+        await this.removeCacheEntry(sentence);
+      }
+
+      // 새로운 패턴 생성
+      const patterns = this.generatePattern(sentence);
+      
+      // DB에 저장
+      const entry = this.learningRepository.create({
+        correctedText: sentence,
+        originalText: sentence,
+        patterns: patterns,
+        alternativeSentences: options.alternativeSentences || [],
+        useCount: options.useCount || 1
+      });
+
+      const savedEntry = await this.learningRepository.save(entry);
+      
+      // 캐시에 추가
+      this.cache.set(key, savedEntry);
+      
+      // 패턴 캐시에 추가
+      patterns.forEach(pattern => {
+        const sentences = this.patternCache.get(pattern) || new Set();
+        sentences.add(sentence);
+        this.patternCache.set(pattern, sentences);
+      });
+
+      this.logger.log(`Admin added new cache entry: ${sentence}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error adding cache entry: ${error.message}`);
+      throw error;
+    }
+  }
 }
