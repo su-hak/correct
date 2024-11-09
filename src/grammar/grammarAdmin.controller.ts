@@ -1,25 +1,25 @@
-import { Controller, Post } from "@nestjs/common";
+import { Controller, Param, Post } from "@nestjs/common";
 import { GrammarService } from "./grammar.service";
 import { GrammarSeedService } from "./grammarSeed.service";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 
 @Controller('admin/grammar')
-@ApiTags('Grammar Admin')  // Swagger에서 그룹화
+@ApiTags('Grammar Admin')
 export class GrammarAdminController {
   constructor(
-    private grammarService: GrammarService,
     private grammarSeedService: GrammarSeedService
   ) {}
 
-  @Post('seed-patterns')
+  @Post('seed-patterns/:patternIndex')
   @ApiOperation({ 
-    summary: '패턴별 예문 자동 생성',
-    description: `다음 5가지 패턴의 예문을 각각 200개씩 자동 생성하여 학습 데이터로 저장합니다:
-    1. '여러 가지 다양한 꽃' 패턴 (수식어가 있는 명사구)
-    2. '마루가 쿵쿵하다' 패턴 (의성어/의태어)
-    3. '원작이 개작되다' 패턴 (수동형)
-    4. '같이 대화하기 싫을 정도야' 패턴 (감정/평가)
-    5. '한국에 언제 왔어요?' 패턴 (의문문)`
+    summary: '패턴별 예문 생성 (40개씩 배치 처리)',
+    description: '선택한 패턴의 예문을 40개씩 생성합니다. 전체 200개를 위해 5번 실행이 필요합니다.'
+  })
+  @ApiParam({
+    name: 'patternIndex',
+    required: true,
+    description: '생성할 패턴 번호 (1-5)',
+    example: 1
   })
   @ApiResponse({
     status: 200,
@@ -27,32 +27,17 @@ export class GrammarAdminController {
     schema: {
       example: {
         success: true,
-        message: 'Pattern examples generated and saved successfully',
-        details: {
-          totalGenerated: 1000,
-          patternCounts: {
-            '수식어_명사구': 200,
-            '의성어_의태어': 200,
-            '수동형': 200,
-            '감정_평가': 200,
-            '의문문': 200
-          }
-        }
+        patternExample: "여러 가지 다양한 꽃",
+        generatedCount: 40,
+        sentences: [
+          "크고 화려한 정원",
+          "작고 귀여운 강아지",
+          // ... 더 많은 문장들
+        ]
       }
     }
   })
-  @ApiResponse({
-    status: 400,
-    description: 'OpenAI API 호출 실패 또는 생성 오류',
-    schema: {
-      example: {
-        success: false,
-        message: 'Failed to generate pattern examples',
-        error: 'OpenAI API error or generation failure'
-      }
-    }
-  })
-  async seedPatternExamples() {
-    return this.grammarSeedService.generatePatternExamples();
+  async seedPatternBatch(@Param('patternIndex') patternIndex: number) {
+    return this.grammarSeedService.generateBatchExamples(Number(patternIndex));
   }
 }
