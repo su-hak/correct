@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Get, Param, Delete } from '@nestjs/common';
 import { GrammarService } from './grammar.service';
 import { AuthGuard } from '../auth/auth.guard';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { GrammarLearningService } from './grammar-Learning.service';
 
 @Controller('grammar')
@@ -81,7 +81,23 @@ export class GrammarController {
     return this.grammarLearningService.removeCacheEntry(sentence);
   }
 
-  @Post('cache')
+  @Post('cache/:sentence')
+  @ApiOperation({ summary: '캐시에 특정 문장 수동 추가' })
+  @ApiParam({
+    name: 'sentence',
+    required: true,
+    description: '캐시에 추가할 문장',
+    example: '아카라이브'
+  })
+  @ApiResponse({
+    status: 200,
+    description: '캐시 추가 결과',
+    schema: {
+      example: {
+        success: true
+      }
+    }
+  })
   async addCache(
     @Body() data: { 
       sentence: string; 
