@@ -47,58 +47,78 @@ export class VisionService {
 
       const textAnnotations = response.data.responses[0]?.textAnnotations;
       if (!textAnnotations || textAnnotations.length === 0) {
+        this.logger.warn('No text annotations found');
         return this.getEmptyResult();
       }
 
-      // 전체 텍스트를 한 번에 가져오기
-      const fullText = textAnnotations[0].description;
-      
-      // 전체 텍스트를 줄 단위로 분리하고 각 줄의 신뢰도 점수 계산
-      const lines = fullText.split('\n').map(line => ({
-        text: line.trim(),
-        confidence: this.calculateConfidence(line, textAnnotations.slice(1))
-      }));
+      // 디버깅을 위한 전체 텍스트 출력
+      this.logger.debug('Full text detected:', textAnnotations[0].description);
 
-      // '올바른 문장을 선택해 주세요' 찾기
-      const titleIndex = lines.findIndex(line => 
-        line.text.includes('올바른 문장을 선택해 주세요') && 
-        line.confidence >= 0.7
-      );
+      // 개별 텍스트 블록들의 신뢰도 출력
+      textAnnotations.slice(1).forEach((annotation, index) => {
+        this.logger.debug(`Text block ${index}:`, {
+          text: annotation.description,
+          confidence: annotation.confidence || 0
+        });
+      });
+
+      // 전체 텍스트를 줄 단위로 분리
+      const lines = textAnnotations[0].description
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      this.logger.debug('Split lines:', lines);
+
+      // 타이틀 라인 찾기 - 더 유연한 매칭
+      let titleIndex = -1;
+      const titlePattern = /올바른\s*문장을?\s*선택해?\s*주세요/;
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (titlePattern.test(lines[i])) {
+          titleIndex = i;
+          break;
+        }
+      }
 
       if (titleIndex === -1) {
-        this.logger.warn('Title not found or confidence too low');
+        this.logger.warn('Title pattern not found in text');
         return this.getEmptyResult();
       }
 
-      // 타이틀 이후 5개의 유효한 문장 찾기
-      const validSentences = lines
+      this.logger.debug('Found title at index:', titleIndex);
+
+      // 타이틀 이후 문장들 추출
+      const candidateSentences = lines
         .slice(titleIndex + 1)
-        .filter(line => 
-          line.text &&
-          line.text.length >= 2 &&
-          line.confidence >= 0.7 &&
-          this.isValidKoreanSentence(line.text)
-        )
-        .slice(0, 5)
-        .map(line => line.text);
+        .filter(line => this.isValidKoreanSentence(line));
+
+      this.logger.debug('Candidate sentences:', candidateSentences);
+
+      // 최대 5개의 문장 선택
+      const validSentences = candidateSentences.slice(0, 5);
 
       if (validSentences.length === 0) {
         this.logger.warn('No valid sentences found after title');
         return this.getEmptyResult();
       }
 
+      this.logger.debug('Valid sentences selected:', validSentences);
+
       // 문법 평가
       const grammarResult = await this.grammarService.findMostNaturalSentence(validSentences);
 
-      // 관련 바운딩 박스 찾기
-      const relevantBoxes = this.getRelevantBoundingBoxes(
-        validSentences,
-        textAnnotations.slice(1)
-      );
+      // 바운딩 박스 찾기
+      const boundingBoxes = validSentences.map(sentence => {
+        const annotation = textAnnotations.slice(1).find(a => 
+          a.description.trim() === sentence.trim()
+        );
+        return annotation?.boundingPoly?.vertices || [];
+      });
 
       return {
         sentences: validSentences,
-        boundingBoxes: relevantBoxes,
+        boundingBoxes,
         correctIndex: grammarResult.correctIndex,
         correctSentence: grammarResult.correctSentence,
         sentenceScores: grammarResult.sentenceScores
@@ -110,35 +130,14 @@ export class VisionService {
     }
   }
 
-  private calculateConfidence(line: string, annotations: any[]): number {
-    const matchingAnnotations = annotations.filter(a => 
-      a.description.includes(line) || line.includes(a.description)
-    );
-
-    if (matchingAnnotations.length === 0) return 0;
-
-    // 가장 높은 신뢰도 반환
-    return Math.max(...matchingAnnotations.map(a => a.confidence || 0));
-  }
-
-  private getRelevantBoundingBoxes(sentences: string[], annotations: any[]): any[] {
-    const boxes = [];
-    for (const sentence of sentences) {
-      const annotation = annotations.find(a => 
-        a.description === sentence || 
-        sentence.includes(a.description)
-      );
-      if (annotation?.boundingPoly?.vertices) {
-        boxes.push(annotation.boundingPoly.vertices);
-      }
-    }
-    return boxes;
-  }
-
   private isValidKoreanSentence(text: string): boolean {
-    return /[가-힣]/.test(text) && 
-           !text.includes('올바른 문장을 선택해 주세요') &&
-           text.length >= 2;
+    return Boolean(
+      text && 
+      text.trim() && 
+      /[가-힣]/.test(text) && 
+      !text.includes('올바른 문장을 선택해 주세요') &&
+      text.length >= 2
+    );
   }
 
   private getEmptyResult() {
