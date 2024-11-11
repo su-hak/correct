@@ -192,4 +192,116 @@ export class GrammarLearningService {
     await this.learningRepository.save(entry);
     this.cache.set(this.generateExactKey(correctSentence), entry);
   }
+
+  // 관리자용 메서드들 추가
+  public async getCacheStats() {
+    if (!this.cacheInitialized && this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
+    return {
+      exactMatches: this.cache.size,
+      patternMatches: this.frequentPatterns.size,
+      cacheEntries: Array.from(this.cache.entries())
+        .map(([key, value]) => ({
+          key,
+          correctSentence: value.correctedText,
+          patterns: value.patterns,
+          useCount: value.useCount
+        }))
+        .sort((a, b) => b.useCount - a.useCount)
+    };
+  }
+
+  public async inspectCache(sentence: string) {
+    if (!this.cacheInitialized && this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
+    const key = this.generateExactKey(sentence);
+    const entry = this.cache.get(key);
+    const patterns = entry?.patterns || [];
+    
+    return {
+      exists: !!entry,
+      entry,
+      patterns,
+      matchedPatterns: patterns.map(pattern => 
+        this.frequentPatterns.get(pattern)
+      ).filter(Boolean)
+    };
+  }
+
+  public async removeCacheEntry(sentence: string) {
+    if (!this.cacheInitialized && this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
+    const key = this.generateExactKey(sentence);
+    const entry = this.cache.get(key);
+
+    if (entry) {
+      // 캐시에서 제거
+      this.cache.delete(key);
+
+      // 패턴 캐시에서 제거
+      if (entry.patterns) {
+        entry.patterns.forEach(pattern => {
+          this.frequentPatterns.delete(pattern);
+        });
+      }
+
+      // DB에서 삭제
+      await this.learningRepository.delete({ correctedText: sentence });
+      return true;
+    }
+    return false;
+  }
+
+  public async addCacheEntry(
+    sentence: string,
+    options: { 
+      useCount?: number;
+      alternativeSentences?: string[];
+    } = {}
+  ) {
+    if (!this.cacheInitialized && this.initializationPromise) {
+      await this.initializationPromise;
+    }
+
+    const key = this.generateExactKey(sentence);
+    
+    // 이미 존재하는 경우 먼저 제거
+    if (this.cache.has(key)) {
+      await this.removeCacheEntry(sentence);
+    }
+
+    // 새로운 패턴 생성
+    const patterns = this.generatePattern(sentence);
+    
+    // DB에 저장
+    const entry = this.learningRepository.create({
+      correctedText: sentence,
+      originalText: sentence,
+      patterns,
+      alternativeSentences: options.alternativeSentences || [],
+      useCount: options.useCount || 1
+    });
+
+    const savedEntry = await this.learningRepository.save(entry);
+    
+    // 캐시에 추가
+    this.cache.set(key, savedEntry);
+    
+    // 패턴 캐시에 추가
+    patterns.forEach(pattern => {
+      this.frequentPatterns.set(pattern, {
+        sentence,
+        count: options.useCount || 1,
+        patterns
+      });
+    });
+
+    return true;
+  }
 }
