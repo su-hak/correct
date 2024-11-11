@@ -6,7 +6,6 @@ import { GrammarLearningService } from './grammar-Learning.service';
 @Injectable()
 export class GrammarService {
   private readonly openaiApiKey: string;
-  private readonly logger = new Logger(GrammarService.name);
 
   constructor(
     private configService: ConfigService,
@@ -21,20 +20,10 @@ export class GrammarService {
     sentenceScores: number[];
   }> {
     try {
-      this.logger.log(`Starting grammar analysis for ${sentences.length} sentences`);
-      this.logger.debug('Input sentences:', sentences);
-
       // 학습 데이터 먼저 확인
-      this.logger.log('Checking learning database for similar corrections');
       const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
       
       if (learningResult.found) {
-        this.logger.log(`Found matching correction in learning database: "${learningResult.correctSentence}"`);
-        this.logger.debug('Learning result details:', {
-          correctIndex: learningResult.correctIndex,
-          scores: learningResult.sentenceScores
-        });
-        
         return {
           correctSentence: learningResult.correctSentence!,
           correctIndex: learningResult.correctIndex!,
@@ -43,7 +32,6 @@ export class GrammarService {
       }
 
       // OpenAI API 호출
-      this.logger.log('No matching correction found in database, calling OpenAI API');
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -66,55 +54,28 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 20000 
+          timeout: 5000 
         }
       );
 
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
-      this.logger.log(`OpenAI API returned index ${index}, validated index: ${validIndex}`);
-      this.logger.debug('Selected correct sentence:', sentences[validIndex]);
-
       // 비동기로 학습 처리
-      this.logger.log('Starting asynchronous learning process');
-      this.grammarLearningService.learnCorrection(
-        sentences[validIndex],
-        sentences
-      ).catch(err => {
-        this.logger.error('Learning process failed:', err);
-        this.logger.error('Failed learning data:', {
-          correctSentence: sentences[validIndex],
-          inputSentences: sentences
-        });
-      });
+      this.grammarLearningService.learnCorrection(sentences[validIndex], sentences);
 
-      const result = {
+      return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
-        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === validIndex ? 100 : 0)
+        sentenceScores: sentences.map((_, i) => i === validIndex ? 100 : 0)
       };
-
-      this.logger.log('Grammar analysis completed successfully');
-      this.logger.debug('Final result:', result);
-
-      return result;
 
     } catch (error) {
-      this.logger.error(`Error in grammar analysis: ${error.message}`);
-      this.logger.error('Error details:', {
-        error: error,
-        inputSentences: sentences
-      });
-      
-      const fallbackResult = {
+      return {
         correctSentence: sentences[0],
         correctIndex: 0,
-        sentenceScores: Array(sentences.length).fill(0).map((_, i) => i === 0 ? 100 : 0)
+        sentenceScores: sentences.map((_, i) => i === 0 ? 100 : 0)
       };
-
-      this.logger.warn('Returning fallback result:', fallbackResult);
-      return fallbackResult;
     }
   }
 }
