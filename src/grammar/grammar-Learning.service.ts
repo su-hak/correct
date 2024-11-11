@@ -62,7 +62,9 @@ export class GrammarLearningService {
   }
 
   private generateExactKey(text: string): string {
-    return text.replace(/\s+/g, '').toLowerCase();
+    const key = text.replace(/\s+/g, '').toLowerCase();
+    this.logger.debug(`Generated key for text "${text}": ${key}`);
+    return key;
   }
 
   private generatePattern(text: string): string[] {
@@ -91,45 +93,6 @@ export class GrammarLearningService {
     return patterns;
   }
 
-  private calculatePatternMatchScore(pattern1: string, pattern2: string): number {
-    if (pattern1 === pattern2) return 100;
-    
-    // 레벤슈타인 거리 기반 유사도 계산
-    const distance = this.levenshteinDistance(pattern1, pattern2);
-    const maxLength = Math.max(pattern1.length, pattern2.length);
-    const similarity = 1 - (distance / maxLength);
-    
-    return Math.floor(similarity * 100);
-  }
-
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix: number[][] = [];
-    
-    for (let i = 0; i <= str1.length; i++) {
-      matrix[i] = [i];
-    }
-    
-    for (let j = 0; j <= str2.length; j++) {
-      matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= str1.length; i++) {
-      for (let j = 1; j <= str2.length; j++) {
-        if (str1[i-1] === str2[j-1]) {
-          matrix[i][j] = matrix[i-1][j-1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i-1][j-1] + 1,
-            matrix[i][j-1] + 1,
-            matrix[i-1][j] + 1
-          );
-        }
-      }
-    }
-    
-    return matrix[str1.length][str2.length];
-  }
-
   public async findSimilarCorrection(sentences: string[]): Promise<{
     found: boolean;
     correctSentence?: string;
@@ -138,68 +101,79 @@ export class GrammarLearningService {
   }> {
     try {
       const originalText = sentences[0];
+      this.logger.debug(`Finding similar correction for original text: ${originalText}`);
+      this.logger.debug(`Cache size: ${this.cache.size}, Pattern cache size: ${this.patternCache.size}`);
+
       const patterns = this.generatePattern(originalText);
+      this.logger.debug('Generated patterns:', patterns);
       
-      // 전체 문장에 대한 스코어 맵 초기화
-      const matchingScores = new Map<number, {
-        score: number,
-        frequency: number
-      }>();
-      
-      // 각 문장별로 패턴 매칭 수행
+      // 1단계: 정확한 매칭 확인
       for (let i = 0; i < sentences.length; i++) {
-        const sentence = sentences[i];
-        const sentencePatterns = this.generatePattern(sentence);
-        
-        for (const pattern of sentencePatterns) {
-          const match = this.frequentPatterns.get(pattern);
-          if (match) {
-            const currentScore = matchingScores.get(i) || { score: 0, frequency: 0 };
-            
-            // match.patterns 배열의 각 패턴과 비교하여 최고 점수 사용
-            const patternScores = match.patterns.map(matchPattern => 
-              this.calculatePatternMatchScore(pattern, matchPattern)
-            );
-            const bestPatternScore = Math.max(...patternScores, 0);
-            
-            // 빈도수 가중치 (0-50)
-            const frequencyWeight = Math.min(match.count / 10, 5) * 10;
-            
-            currentScore.score += bestPatternScore;
-            currentScore.frequency += frequencyWeight;
-            matchingScores.set(i, currentScore);
-          }
-        }
-      }
-
-      // 최종 스코어 계산 (패턴 매칭 70% + 빈도수 30%)
-      const finalScores = new Map<number, number>();
-      matchingScores.forEach((value, key) => {
-        const finalScore = (value.score * 0.7) + (value.frequency * 0.3);
-        finalScores.set(key, finalScore);
-      });
-
-      if (finalScores.size > 0) {
-        const entries = Array.from(finalScores.entries());
-        // 스코어가 가장 높은 상위 3개 중에서 선택
-        const topScores = entries
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3);
-
-        // 가장 높은 스코어가 특정 임계값을 넘는 경우에만 반환
-        if (topScores[0][1] >= 70) {
+        const exactKey = this.generateExactKey(sentences[i]);
+        if (this.cache.has(exactKey)) {
+          this.logger.debug(`Found exact match for sentence: ${sentences[i]}`);
           return {
             found: true,
-            correctSentence: sentences[topScores[0][0]],
-            correctIndex: topScores[0][0],
-            sentenceScores: sentences.map((_, i) => finalScores.get(i) || 0)
+            correctSentence: sentences[i],
+            correctIndex: i,
+            sentenceScores: sentences.map((_, idx) => idx === i ? 100 : 0)
           };
         }
       }
 
+      // 2단계: 패턴 매칭
+      const matchingScores = new Map<number, number>();
+      
+      sentences.forEach((sentence, index) => {
+        const sentencePatterns = this.generatePattern(sentence);
+        this.logger.debug(`Patterns for sentence ${index}:`, sentencePatterns);
+
+        let maxScore = 0;
+        sentencePatterns.forEach(pattern => {
+          const match = this.frequentPatterns.get(pattern);
+          if (match) {
+            this.logger.debug(`Found pattern match for sentence ${index}:`, {
+              pattern,
+              matchedSentence: match.sentence,
+              frequency: match.count
+            });
+            
+            // 기본 점수 (패턴 매칭)
+            const baseScore = 60;
+            // 빈도수 보너스 (최대 40점)
+            const frequencyBonus = Math.min(match.count, 10) * 4;
+            const score = baseScore + frequencyBonus;
+            
+            maxScore = Math.max(maxScore, score);
+          }
+        });
+
+        if (maxScore > 0) {
+          matchingScores.set(index, maxScore);
+        }
+      });
+
+      if (matchingScores.size > 0) {
+        this.logger.debug('Final matching scores:', Object.fromEntries(matchingScores));
+        const entries = Array.from(matchingScores.entries());
+        const bestMatch = entries.reduce((a, b) => a[1] > b[1] ? a : b);
+
+        // 최소 점수 기준을 60점으로 낮춤
+        if (bestMatch[1] >= 60) {
+          return {
+            found: true,
+            correctSentence: sentences[bestMatch[0]],
+            correctIndex: bestMatch[0],
+            sentenceScores: sentences.map((_, i) => matchingScores.get(i) || 0)
+          };
+        }
+      }
+
+      this.logger.debug('No matching pattern found with sufficient score');
       return { found: false };
+
     } catch (error) {
-      this.logger.error(`Error finding similar correction: ${error.message}`);
+      this.logger.error(`Error finding similar correction: ${error.message}`, error.stack);
       return { found: false };
     }
   }
