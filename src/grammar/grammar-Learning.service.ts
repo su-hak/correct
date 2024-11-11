@@ -100,82 +100,126 @@ export class GrammarLearningService {
     sentenceScores?: number[];
   }> {
     try {
-      const originalText = sentences[0];
-      this.logger.debug(`Finding similar correction for original text: ${originalText}`);
-      this.logger.debug(`Cache size: ${this.cache.size}, Pattern cache size: ${this.patternCache.size}`);
+      this.logger.debug('Input sentences:', sentences);
 
-      const patterns = this.generatePattern(originalText);
-      this.logger.debug('Generated patterns:', patterns);
-      
-      // 1단계: 정확한 매칭 확인
-      for (let i = 0; i < sentences.length; i++) {
-        const exactKey = this.generateExactKey(sentences[i]);
-        if (this.cache.has(exactKey)) {
-          this.logger.debug(`Found exact match for sentence: ${sentences[i]}`);
-          return {
-            found: true,
-            correctSentence: sentences[i],
-            correctIndex: i,
-            sentenceScores: sentences.map((_, idx) => idx === i ? 100 : 0)
-          };
-        }
-      }
+      // 1단계: 기본적인 문법 검사 점수 계산
+      const grammarScores = sentences.map(sentence => this.calculateGrammarScore(sentence));
+      this.logger.debug('Grammar scores:', grammarScores);
 
-      // 2단계: 패턴 매칭
+      // 2단계: 학습 데이터 기반 매칭
       const matchingScores = new Map<number, number>();
       
       sentences.forEach((sentence, index) => {
-        const sentencePatterns = this.generatePattern(sentence);
-        this.logger.debug(`Patterns for sentence ${index}:`, sentencePatterns);
+        // 기본 문법 점수가 낮은 문장은 제외
+        if (grammarScores[index] < 70) {
+          this.logger.debug(`Sentence ${index} excluded due to low grammar score:`, sentence);
+          return;
+        }
 
-        let maxScore = 0;
+        const sentencePatterns = this.generatePattern(sentence);
+        let maxMatchScore = 0;
+
         sentencePatterns.forEach(pattern => {
           const match = this.frequentPatterns.get(pattern);
           if (match) {
-            this.logger.debug(`Found pattern match for sentence ${index}:`, {
-              pattern,
-              matchedSentence: match.sentence,
-              frequency: match.count
-            });
-            
-            // 기본 점수 (패턴 매칭)
-            const baseScore = 60;
-            // 빈도수 보너스 (최대 40점)
-            const frequencyBonus = Math.min(match.count, 10) * 4;
-            const score = baseScore + frequencyBonus;
-            
-            maxScore = Math.max(maxScore, score);
+            const matchScore = this.calculateMatchScore(match, sentence);
+            maxMatchScore = Math.max(maxMatchScore, matchScore);
           }
         });
 
-        if (maxScore > 0) {
-          matchingScores.set(index, maxScore);
-        }
+        matchingScores.set(index, maxMatchScore);
       });
 
-      if (matchingScores.size > 0) {
-        this.logger.debug('Final matching scores:', Object.fromEntries(matchingScores));
-        const entries = Array.from(matchingScores.entries());
-        const bestMatch = entries.reduce((a, b) => a[1] > b[1] ? a : b);
+      this.logger.debug('Matching scores:', Object.fromEntries(matchingScores));
 
-        // 최소 점수 기준을 60점으로 낮춤
-        if (bestMatch[1] >= 60) {
-          return {
-            found: true,
-            correctSentence: sentences[bestMatch[0]],
-            correctIndex: bestMatch[0],
-            sentenceScores: sentences.map((_, i) => matchingScores.get(i) || 0)
-          };
-        }
+      // 3단계: 최종 점수 계산 (문법 점수 70% + 매칭 점수 30%)
+      const finalScores = sentences.map((_, index) => {
+        const grammarScore = grammarScores[index];
+        const matchScore = matchingScores.get(index) || 0;
+        return (grammarScore * 0.7) + (matchScore * 0.3);
+      });
+
+      this.logger.debug('Final scores:', finalScores);
+
+      // 최고 점수가 80점 이상인 경우만 선택
+      const maxScore = Math.max(...finalScores);
+      const bestIndex = finalScores.indexOf(maxScore);
+
+      if (maxScore >= 80) {
+        return {
+          found: true,
+          correctSentence: sentences[bestIndex],
+          correctIndex: bestIndex,
+          sentenceScores: finalScores
+        };
       }
 
-      this.logger.debug('No matching pattern found with sufficient score');
       return { found: false };
 
     } catch (error) {
       this.logger.error(`Error finding similar correction: ${error.message}`, error.stack);
       return { found: false };
     }
+  }
+
+  private calculateGrammarScore(sentence: string): number {
+    let score = 100;
+    
+    // 1. 기본적인 문법 오류 체크
+    if (sentence.includes('바게')) score -= 30;  // 맞춤법 오류
+    if (sentence.includes('안되')) score -= 20;  // 띄어쓰기 오류
+    if (sentence.includes('데서')) score -= 20;  // 맞춤법 오류
+    if (sentence.includes('께서서')) score -= 30;  // 조사 중복
+
+    // 2. 문장 구조 체크
+    const words = sentence.split(' ');
+    
+    // 2.1 조사 사용 검사
+    const hasInvalidParticle = words.some(word => 
+      word.endsWith('은은') || 
+      word.endsWith('는는') || 
+      word.endsWith('이이') || 
+      word.endsWith('가가')
+    );
+    if (hasInvalidParticle) score -= 25;
+
+    // 2.2 문장 종결 검사
+    const lastWord = words[words.length - 1];
+    const hasValidEnding = /[다요죠네요까요]$/.test(lastWord);
+    if (!hasValidEnding) score -= 15;
+
+    // 2.3 문장 길이 검사
+    if (words.length < 2) score -= 20;  // 너무 짧은 문장
+    if (words.length > 15) score -= 15;  // 너무 긴 문장
+
+    return Math.max(0, score);
+  }
+
+  private calculateMatchScore(match: { count: number, sentence: string }, currentSentence: string): number {
+    let score = 0;
+    
+    // 1. 빈도수 기반 점수 (최대 40점)
+    score += Math.min(match.count, 8) * 5;
+
+    // 2. 문장 유사도 점수 (최대 60점)
+    const similarity = this.calculateSentenceSimilarity(match.sentence, currentSentence);
+    score += similarity * 60;
+
+    return score;
+  }
+
+  private calculateSentenceSimilarity(s1: string, s2: string): number {
+    // 단어 단위로 분리
+    const words1 = new Set(s1.split(' '));
+    const words2 = new Set(s2.split(' '));
+
+    // 교집합 크기
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    // 합집합 크기
+    const union = new Set([...words1, ...words2]);
+
+    // 자카드 유사도 계산
+    return intersection.size / union.size;
   }
 
   public async learnCorrection(correctSentence: string, allSentences?: string[]): Promise<void> {
