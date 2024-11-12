@@ -2,10 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { GrammarLearningService } from './grammar-Learning.service';
+import { PerformanceLogger } from 'src/performance_Logger';
 
 @Injectable()
 export class GrammarService {
   private readonly openaiApiKey: string;
+  private readonly logger = new Logger(GrammarService.name);
+
 
   constructor(
     private configService: ConfigService,
@@ -19,11 +22,15 @@ export class GrammarService {
     correctIndex: number;
     sentenceScores: number[];
   }> {
+    PerformanceLogger.start('findMostNaturalSentence');
     try {
-      // 학습 데이터 먼저 확인
+      // 학습 데이터 확인
+      PerformanceLogger.start('learningCheck');
       const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
-      
+      const learningTime = PerformanceLogger.end('learningCheck', this.logger);
+
       if (learningResult.found) {
+        PerformanceLogger.end('findMostNaturalSentence', this.logger);
         return {
           correctSentence: learningResult.correctSentence!,
           correctIndex: learningResult.correctIndex!,
@@ -32,6 +39,7 @@ export class GrammarService {
       }
 
       // OpenAI API 호출
+      PerformanceLogger.start('openaiAPI');
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -57,20 +65,29 @@ export class GrammarService {
           timeout: 5000 
         }
       );
+      const apiTime = PerformanceLogger.end('openaiAPI', this.logger);
 
+      // 결과 처리
+      PerformanceLogger.start('resultProcessing');
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
       // 비동기로 학습 처리
       this.grammarLearningService.learnCorrection(sentences[validIndex], sentences);
 
-      return {
+      const result = {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
         sentenceScores: sentences.map((_, i) => i === validIndex ? 100 : 0)
       };
 
+      PerformanceLogger.end('resultProcessing', this.logger);
+      PerformanceLogger.end('findMostNaturalSentence', this.logger);
+
+      return result;
+
     } catch (error) {
+      PerformanceLogger.end('findMostNaturalSentence', this.logger);
       return {
         correctSentence: sentences[0],
         correctIndex: 0,

@@ -25,11 +25,16 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
+      this.logger.log('Starting text detection...');
+      const startTime = Date.now();
+  
       const optimizedBuffer = await sharp(imageBuffer)
         .resize(1024, null, { withoutEnlargement: true })
         .jpeg({ quality: 85 })
         .toBuffer();
-
+  
+      this.logger.log(`Image optimization took ${Date.now() - startTime}ms`);
+  
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
@@ -44,86 +49,77 @@ export class VisionService {
           }]
         }
       );
-
+  
+      this.logger.log(`Vision API request took ${Date.now() - startTime}ms`);
+  
       const textAnnotations = response.data.responses[0]?.textAnnotations;
       if (!textAnnotations || textAnnotations.length === 0) {
         this.logger.warn('No text annotations found');
         return this.getEmptyResult();
       }
-
-      // 디버깅을 위한 전체 텍스트 출력
-      this.logger.debug('Full text detected:', textAnnotations[0].description);
-
-      // 개별 텍스트 블록들의 신뢰도 출력
-      textAnnotations.slice(1).forEach((annotation, index) => {
-        this.logger.debug(`Text block ${index}:`, {
-          text: annotation.description,
-          confidence: annotation.confidence || 0
-        });
-      });
-
+  
       // 전체 텍스트를 줄 단위로 분리
-      const lines = textAnnotations[0].description
+      const allLines = textAnnotations[0].description
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
-
-      this.logger.debug('Split lines:', lines);
-
-      // 타이틀 라인 찾기 - 더 유연한 매칭
+  
+      this.logger.debug('All detected lines:', allLines);
+  
+      // 타이틀 패턴 매칭을 더 유연하게
       let titleIndex = -1;
-      const titlePattern = /올바른\s*문장을?\s*선택해?\s*주세요/;
-      
-      for (let i = 0; i < lines.length; i++) {
-        if (titlePattern.test(lines[i])) {
+      const titlePatterns = [
+        /올바른\s*문장을?\s*선택해?\s*주[세셰]요?/,
+        /바른\s*문장[을을]?\s*선택해?\s*주[세셰]요?/,
+        /문장[을을]?\s*선택해?\s*주[세셰]요?/
+      ];
+  
+      // 처음 3줄 내에서 타이틀 찾기
+      for (let i = 0; i < Math.min(3, allLines.length); i++) {
+        if (titlePatterns.some(pattern => pattern.test(allLines[i]))) {
           titleIndex = i;
           break;
         }
       }
-
+  
+      // 타이틀을 찾지 못했다면 첫 번째 줄을 타이틀로 가정
       if (titleIndex === -1) {
-        this.logger.warn('Title pattern not found in text');
-        return this.getEmptyResult();
+        titleIndex = 0;
       }
-
-      this.logger.debug('Found title at index:', titleIndex);
-
-      // 타이틀 이후 문장들 추출
-      const candidateSentences = lines
+  
+      this.logger.debug('Title found at index:', titleIndex);
+  
+      // 타이틀 이후의 모든 한글 문장 추출
+      const candidateSentences = allLines
         .slice(titleIndex + 1)
         .filter(line => this.isValidKoreanSentence(line));
-
+  
       this.logger.debug('Candidate sentences:', candidateSentences);
-
-      // 최대 5개의 문장 선택
-      const validSentences = candidateSentences.slice(0, 5);
-
-      if (validSentences.length === 0) {
-        this.logger.warn('No valid sentences found after title');
+  
+      // 최대 10개의 문장까지 고려 (여유있게)
+      const validSentences = candidateSentences.slice(0, 10);
+  
+      if (validSentences.length < 5) {
+        this.logger.warn(`Found only ${validSentences.length} sentences`);
         return this.getEmptyResult();
       }
-
-      this.logger.debug('Valid sentences selected:', validSentences);
-
+  
+      // 정확히 5개의 문장 선택
+      const finalSentences = validSentences.slice(0, 5);
+      
       // 문법 평가
-      const grammarResult = await this.grammarService.findMostNaturalSentence(validSentences);
-
-      // 바운딩 박스 찾기
-      const boundingBoxes = validSentences.map(sentence => {
-        const annotation = textAnnotations.slice(1).find(a => 
-          a.description.trim() === sentence.trim()
-        );
-        return annotation?.boundingPoly?.vertices || [];
-      });
-
+      const grammarResult = await this.grammarService.findMostNaturalSentence(finalSentences);
+      
+      this.logger.log(`Total processing took ${Date.now() - startTime}ms`);
+  
       return {
-        sentences: validSentences,
-        boundingBoxes,
+        sentences: finalSentences,
+        boundingBoxes: [], // 필요한 경우에만 계산
         correctIndex: grammarResult.correctIndex,
         correctSentence: grammarResult.correctSentence,
         sentenceScores: grammarResult.sentenceScores
       };
-
+  
     } catch (error) {
       this.logger.error('Vision API error:', error);
       return this.getEmptyResult();
@@ -131,13 +127,23 @@ export class VisionService {
   }
 
   private isValidKoreanSentence(text: string): boolean {
-    return Boolean(
-      text && 
-      text.trim() && 
-      /[가-힣]/.test(text) && 
-      !text.includes('올바른 문장을 선택해 주세요') &&
-      text.length >= 2
-    );
+    // 조금 더 유연한 검증
+    if (!text || text.length < 2) return false;
+    
+    // 한글 포함 여부
+    if (!/[가-힣]/.test(text)) return false;
+    
+    // 제외할 패턴들
+    const excludePatterns = [
+      /^\d+$/, // 숫자로만 된 텍스트
+      /^\s*$/, // 공백만 있는 텍스트
+      /^[A-Za-z\s]+$/, // 영어로만 된 텍스트
+      /^[×%\d\s]+$/, // 특수문자와 숫자로만 된 텍스트
+    ];
+    
+    if (excludePatterns.some(pattern => pattern.test(text))) return false;
+    
+    return true;
   }
 
   private getEmptyResult() {

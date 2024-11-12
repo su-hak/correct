@@ -3,6 +3,7 @@ import { GrammarLearning } from "./entities/grammar-Learning.entity";
 import { MoreThan, Repository } from "typeorm";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import { PerformanceLogger } from "src/performance_Logger";
 
 @Injectable()
 export class GrammarLearningService {
@@ -126,12 +127,21 @@ export class GrammarLearningService {
     correctIndex?: number;
     sentenceScores?: number[];
   }> {
+    PerformanceLogger.start('findSimilarCorrection');
     try {
       if (!this.cacheInitialized && this.initializationPromise) {
+        PerformanceLogger.start('cacheInitialization');
         await this.initializationPromise;
+        PerformanceLogger.end('cacheInitialization', this.logger);
       }
   
+      // 문법 점수 계산
+      PerformanceLogger.start('grammarScoring');
       const grammarScores = sentences.map(sentence => this.calculateGrammarScore(sentence));
+      PerformanceLogger.end('grammarScoring', this.logger);
+
+      // 패턴 매칭
+      PerformanceLogger.start('patternMatching');
       const matchingScores = new Map<number, number>();
   
       // 모든 문장에 대해 패턴 매칭 수행
@@ -154,24 +164,30 @@ export class GrammarLearningService {
         const finalScore = (grammarScores[index] * 0.7) + (maxPatternScore * 0.3);
         matchingScores.set(index, finalScore);
       }));
+      PerformanceLogger.end('patternMatching', this.logger);
+
   
-      // 최고 점수 선택 (최소 70점 이상)
+      // 결과 선택
+      PerformanceLogger.start('resultSelection');
       const entries = Array.from(matchingScores.entries());
       const validEntries = entries.filter(([_, score]) => score >= 70);
+
   
-      if (validEntries.length > 0) {
-        const bestMatch = validEntries.reduce((a, b) => a[1] > b[1] ? a : b);
-        return {
-          found: true,
-          correctSentence: sentences[bestMatch[0]],
-          correctIndex: bestMatch[0],
-          sentenceScores: sentences.map((_, i) => matchingScores.get(i) || 0)
-        };
-      }
-  
-      return { found: false };
+      const result = validEntries.length > 0 
+        ? {
+            found: true,
+            correctSentence: sentences[validEntries[0][0]],
+            correctIndex: validEntries[0][0],
+            sentenceScores: sentences.map((_, i) => matchingScores.get(i) || 0)
+          }
+        : { found: false };
+
+      PerformanceLogger.end('resultSelection', this.logger);
+      PerformanceLogger.end('findSimilarCorrection', this.logger);
+
+      return result;
     } catch (error) {
-      this.logger.error('Error in findSimilarCorrection:', error);
+      PerformanceLogger.end('findSimilarCorrection', this.logger);
       return { found: false };
     }
   }
