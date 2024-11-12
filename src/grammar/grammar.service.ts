@@ -26,41 +26,43 @@ export class GrammarService {
   }> {
     PerformanceLogger.start('findMostNaturalSentence');
     try {
+
+      if (!sentences || !Array.isArray(sentences) || sentences.length === 0) {
+        this.logger.error('Invalid input sentences:', sentences);
+        throw new Error('Invalid input sentences');
+      }
+
+      this.logger.log(`Processing ${sentences.length} sentences`);
+      this.logger.debug('Input sentences:', sentences);
+
       // 학습 데이터 확인
       PerformanceLogger.start('learningCheck');
       const learningResult = await this.grammarLearningService.findSimilarCorrection(sentences);
       const learningTime = PerformanceLogger.end('learningCheck', this.logger);
 
-      if (learningResult.found) {
-        PerformanceLogger.end('findMostNaturalSentence', this.logger);
+      if (learningResult.found && learningResult.correctSentence) {
         return {
-          correctSentence: learningResult.correctSentence!,
-          correctIndex: learningResult.correctIndex!,
-          sentenceScores: learningResult.sentenceScores!
+          correctSentence: learningResult.correctSentence,
+          correctIndex: learningResult.correctIndex ?? 0,
+          sentenceScores: learningResult.sentenceScores ?? sentences.map((_, i) => i === 0 ? 100 : 0)
         };
       }
 
       // OpenAI API 호출
       PerformanceLogger.start('openaiAPI');
 
-      const openaiPromise = axios.post<{
-        choices: Array<{
-          message: {
-            content: string;
-          };
-        }>;
-      }>(
+      const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
           model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
-              content: "주어진 문장들 중 가장 자연스럽고 맞춤법이 정확한 문장의 인덱스만 숫자로 답하세요. 기준은 다음과 같습니다:\n1. 맞춤법이 정확한가\n2. 주어+목적어+서술어 순서가 맞는가\n3. 도치법이 없는가\n4. 조사와 어미가 올바른가"
+              content: "네이버 맞춤법 검사기와 동일하게 검사해서 올바른 하나의 문장을 골라."
             },
             {
               role: "user",
-              content: `아래 문장 중에서 가장 자연스러운 문장의 번호만 답하세요:\n${sentences.map((s, i) => `${i}. ${s}`).join('\n')}`
+              content: `아래 문장 중에서 가장 자연스러운 문장의 번호를 빠르게 답하세요:\n${sentences.map((s, i) => `${i}. ${s}`).join('\n')}`
             }
           ],
           temperature: 0,
@@ -71,52 +73,31 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: OPENAI_TIMEOUT
+          timeout: 8000
         }
       );
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('OpenAI timeout')), OPENAI_TIMEOUT);
-      });
 
-      const openaiResponse = await Promise.race([openaiPromise, timeoutPromise]) as AxiosResponse<{
-        choices: Array<{
-          message: {
-            content: string;
-          };
-        }>;
-      }>;
-
-      const apiTime = PerformanceLogger.end('openaiAPI', this.logger);
-
-      // 결과 처리
-      PerformanceLogger.start('resultProcessing');
-      const index = parseInt(openaiResponse.data.choices[0]?.message?.content?.trim() ?? '0');
+      const index = parseInt(response.data.choices?.[0]?.message?.content?.trim() ?? '0');
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
       // 비동기로 학습 처리
-      this.grammarLearningService.learnCorrection(sentences[validIndex], sentences);
+      this.grammarLearningService.learnCorrection(sentences[validIndex], sentences)
+        .catch(err => this.logger.error('Learning error:', err));
 
-      const result = {
+      return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
         sentenceScores: sentences.map((_, i) => i === validIndex ? 100 : 0)
       };
 
-      PerformanceLogger.end('resultProcessing', this.logger);
-      PerformanceLogger.end('findMostNaturalSentence', this.logger);
-
-      return result;
-
     } catch (error) {
-      // OpenAI API 타임아웃 또는 다른 에러 발생 시
-      this.logger.error('OpenAI API error, falling back to best guess', error);
-      PerformanceLogger.end('findMostNaturalSentence', this.logger);
-
-      const bestGuess = await this.grammarLearningService.getBestGuess(sentences);
+      this.logger.error('Error in findMostNaturalSentence:', error);
+      
+      // 기본값 반환
       return {
-        correctSentence: bestGuess.sentence,
-        correctIndex: bestGuess.index,
-        sentenceScores: sentences.map((_, i) => i === bestGuess.index ? 100 : 0)
+        correctSentence: sentences[0],
+        correctIndex: 0,
+        sentenceScores: sentences.map((_, i) => i === 0 ? 100 : 0)
       };
     }
   }

@@ -121,25 +121,25 @@ export class VisionService {
       
       // 유효한 문장 필터링
       const validSentences = remainingLines
-        .filter(line => this.isValidKoreanSentence(line))
-        .filter((line, index, self) => self.indexOf(line) === index); // 중복 제거
+      .filter(line => this.isValidKoreanSentence(line))
+      .filter((line, index, self) => self.indexOf(line) === index); // 중복 제거
 
-      this.logger.debug('Valid sentences found:', validSentences);
+    this.logger.debug('Valid sentences found:', validSentences);
 
-      // 문장이 충분하지 않은 경우
-      if (validSentences.length < 2) {
-        return {
-          type: 'error',
-          message: 'Not enough valid sentences detected'
-        };
-      }
+    // 문장이 충분하지 않은 경우
+    if (!validSentences || validSentences.length < 2) {
+      return {
+        type: 'error',
+        message: 'Not enough valid sentences detected'
+      };
+    }
 
-      // 최대 5개 문장으로 제한
-      const finalSentences = validSentences.slice(0, 5);
-
-      // 문법 검사 결과 반환
+    // 최대 5개 문장으로 제한
+    const finalSentences = validSentences.slice(0, 5);
+    
+    try {
       const grammarResult = await this.grammarService.findMostNaturalSentence(finalSentences);
-
+      
       return {
         type: 'sentences',
         data: {
@@ -149,12 +149,22 @@ export class VisionService {
           sentenceScores: grammarResult.sentenceScores
         }
       };
-
-    } catch (error) {
-      this.logger.error('Vision API error:', error);
-      throw error;
+    } catch (grammarError) {
+      this.logger.error('Grammar analysis failed:', grammarError);
+      return {
+        type: 'error',
+        message: 'Grammar analysis failed'
+      };
     }
+
+  } catch (error) {
+    this.logger.error('Vision API error:', error);
+    return {
+      type: 'error',
+      message: 'Text analysis failed'
+    };
   }
+}
 
   private isValidKoreanSentence(text: string): boolean {
     // 기본 검증
