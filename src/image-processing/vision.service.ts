@@ -20,23 +20,33 @@ export class VisionService {
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
     try {
       this.logger.log('Starting text detection...');
-
-      // 이미지 최적화 강화
+  
+      // 이미지 전처리 강화
       const optimizedBuffer = await sharp(imageBuffer)
-        .resize({ 
-          width: 1024,
-          fit: 'contain',
-          background: { r: 255, g: 255, b: 255 }
+        .rotate()  // 자동 회전 보정
+        .resize({
+          width: 1280,
+          height: 1280,
+          fit: 'inside',
+          withoutEnlargement: true
         })
-        .normalize() // 대비 향상
-        .sharpen() // 선명도 향상
-        .jpeg({ 
-          quality: 95, // 품질 향상
-          chromaSubsampling: '4:4:4' // 더 나은 텍스트 인식을 위해
+        .normalize()  // 자동 대비 조정
+        .modulate({
+          brightness: 1.1,
+          saturation: 1.1
+        })
+        .sharpen({
+          sigma: 1.5,
+          m1: 1.5,
+          m2: 0.7,
+        })
+        .toFormat('jpeg', {
+          quality: 95,
+          chromaSubsampling: '4:4:4'
         })
         .toBuffer();
-
-      // Vision API 호출
+  
+      // Vision API 호출 시 설정 강화
       const visionResponse = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
@@ -49,7 +59,7 @@ export class VisionService {
               model: 'builtin/latest'
             }],
             imageContext: {
-              languageHints: ['ko'], // 한국어 힌트 추가
+              languageHints: ['ko'],
               textDetectionParams: {
                 enableTextDetectionConfidenceScore: true
               }
@@ -58,6 +68,9 @@ export class VisionService {
         },
         { timeout: 10000 }
       );
+  
+      // 디버그용 로그 추가
+      this.logger.debug('Vision API response:', JSON.stringify(visionResponse.data, null, 2));
 
       const textAnnotations = visionResponse.data.responses[0]?.textAnnotations;
       
@@ -138,11 +151,8 @@ export class VisionService {
       };
 
     } catch (error) {
-      this.logger.error('Error in text detection:', error);
-      return {
-        type: 'error',
-        message: 'Text analysis failed'
-      };
+      this.logger.error('Vision API error:', error);
+      throw error;
     }
   }
 
