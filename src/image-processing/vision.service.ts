@@ -121,50 +121,39 @@ export class VisionService {
       
       // 유효한 문장 필터링
       const validSentences = remainingLines
-      .filter(line => this.isValidKoreanSentence(line))
-      .filter((line, index, self) => self.indexOf(line) === index); // 중복 제거
+        .filter(line => this.isValidKoreanSentence(line));
 
-    this.logger.debug('Valid sentences found:', validSentences);
+      if (validSentences.length < 5) {
+        return {
+          type: 'error',
+          message: 'Not enough valid sentences detected'
+        };
+      }
 
-    // 문장이 충분하지 않은 경우
-    if (!validSentences || validSentences.length < 2) {
-      return {
-        type: 'error',
-        message: 'Not enough valid sentences detected'
-      };
-    }
-
-    // 최대 5개 문장으로 제한
-    const finalSentences = validSentences.slice(0, 5);
-    
-    try {
-      const grammarResult = await this.grammarService.findMostNaturalSentence(finalSentences);
+      // 정확히 5개의 문장만 사용
+      const finalSentences = validSentences.slice(0, 5);
       
+      const grammarResult = await this.grammarService.findMostNaturalSentence(finalSentences);
+
+      // 응답 데이터 구조 수정
       return {
         type: 'sentences',
         data: {
-          sentences: finalSentences,
-          correctIndex: grammarResult.correctIndex,
-          correctSentence: grammarResult.correctSentence,
-          sentenceScores: grammarResult.sentenceScores
+          sentences: finalSentences,  // 문장 배열
+          correctIndex: grammarResult.correctIndex,  // 정답 인덱스
+          correctSentence: grammarResult.correctSentence,  // 정답 문장
+          sentenceScores: grammarResult.sentenceScores  // 점수 배열
         }
       };
-    } catch (grammarError) {
-      this.logger.error('Grammar analysis failed:', grammarError);
+
+    } catch (error) {
+      this.logger.error('Vision API error:', error);
       return {
         type: 'error',
-        message: 'Grammar analysis failed'
+        message: 'Analysis failed'
       };
     }
-
-  } catch (error) {
-    this.logger.error('Vision API error:', error);
-    return {
-      type: 'error',
-      message: 'Text analysis failed'
-    };
   }
-}
 
   private isValidKoreanSentence(text: string): boolean {
     // 기본 검증
