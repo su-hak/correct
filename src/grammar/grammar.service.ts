@@ -80,9 +80,8 @@ export class GrammarService {
       const index = parseInt(response.data.choices?.[0]?.message?.content?.trim() ?? '0');
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
-      // 비동기로 학습 처리
-      this.grammarLearningService.learnCorrection(sentences[validIndex], sentences)
-        .catch(err => this.logger.error('Learning error:', err));
+       // 비동기 학습 처리를 별도 함수로 분리
+       this.handleLearning(sentences[validIndex], sentences);
 
       return {
         correctSentence: sentences[validIndex],
@@ -99,6 +98,15 @@ export class GrammarService {
         correctIndex: 0,
         sentenceScores: sentences.map((_, i) => i === 0 ? 100 : 0)
       };
+    }
+  }
+
+  // 학습 처리를 위한 별도 메소드
+  private async handleLearning(correctSentence: string, sentences: string[]): Promise<void> {
+    try {
+      await this.grammarLearningService.learnCorrection(correctSentence, sentences);
+    } catch (error) {
+      this.logger.error('Learning error:', error);
     }
   }
 }
