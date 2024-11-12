@@ -23,13 +23,13 @@ export class VisionService {
       const startTime = Date.now();
 
       const optimizedBuffer = await sharp(imageBuffer)
-        .resize({ 
+        .resize({
           width: 1024,
           height: 1024,
           fit: 'inside',
-          withoutEnlargement: true 
+          withoutEnlargement: true
         })
-        .jpeg({ 
+        .jpeg({
           quality: 85,
           progressive: true,
           optimizeCoding: true
@@ -66,57 +66,62 @@ export class VisionService {
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-      let titleIndex = -1;
+      this.logger.debug('Detected lines:', allLines);
+
       const titlePatterns = [
         /올바른\s*문장을?\s*선택해?\s*주[세셰]요?/,
         /바른\s*문장[을을]?\s*선택해?\s*주[세셰]요?/,
         /문장[을을]?\s*선택해?\s*주[세셰]요?/
       ];
 
-      for (let i = 0; i < Math.min(3, allLines.length); i++) {
-        if (titlePatterns.some(pattern => pattern.test(allLines[i]))) {
-          titleIndex = i;
-          break;
-        }
-      }
+      let titleIndex = allLines.findIndex(line =>
+        titlePatterns.some(pattern => pattern.test(line))
+      );
 
       if (titleIndex === -1) {
+        this.logger.warn('Title not found');
         return {
           type: 'error',
-          message: '타이틀을 찾을 수 없습니다.'
+          message: 'Unable to find title'
         };
       }
 
-      const candidateSentences = allLines
+      // 문장 추출
+      const validSentences = allLines
         .slice(titleIndex + 1)
-        .filter(line => this.isValidKoreanSentence(line));
+        .filter(line => this.isValidKoreanSentence(line))
+        .slice(0, 5);
 
-      if (candidateSentences.length < 5) {
+      if (validSentences.length < 5) {
+        this.logger.warn('Not enough valid sentences found');
         return {
-          type: 'sentences',
-          data: []  // 빈 배열 반환
+          type: 'error',
+          message: 'Not enough valid sentences detected'
         };
       }
 
-      const finalSentences = candidateSentences.slice(0, 5);
-      const grammarResult = await this.grammarService.findMostNaturalSentence(finalSentences);
+      // 문법 분석
+      const grammarResult = await this.grammarService.findMostNaturalSentence(validSentences);
 
-      // 최종 결과 반환
-      return {
+      // 응답 데이터 구성
+      const responseData = {
         type: 'sentences',
         data: {
-          sentences: finalSentences,
+          sentences: validSentences,
           correctIndex: grammarResult.correctIndex,
           correctSentence: grammarResult.correctSentence,
           sentenceScores: grammarResult.sentenceScores
         }
       };
 
+      this.logger.debug('Sending response:', responseData);
+      return responseData;
+
     } catch (error) {
-      this.logger.error('Vision API error:', error);
+      this.logger.error('Error in text detection:', error);
       return {
         type: 'error',
-        message: 'Text detection failed'
+        message: 'Analysis failed'
       };
     }
   }
