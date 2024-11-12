@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import { GrammarLearningService } from './grammar-Learning.service';
 import { PerformanceLogger } from 'src/performance_Logger';
+
+const OPENAI_TIMEOUT = 8000;
 
 @Injectable()
 export class GrammarService {
@@ -40,7 +42,14 @@ export class GrammarService {
 
       // OpenAI API 호출
       PerformanceLogger.start('openaiAPI');
-      const response = await axios.post(
+
+      const openaiPromise = axios.post<{
+        choices: Array<{
+          message: {
+            content: string;
+          };
+        }>;
+      }>(
         'https://api.openai.com/v1/chat/completions',
         {
           model: "gpt-4o-mini",
@@ -62,14 +71,26 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 5000 
+          timeout: OPENAI_TIMEOUT
         }
       );
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('OpenAI timeout')), OPENAI_TIMEOUT);
+      });
+
+      const openaiResponse = await Promise.race([openaiPromise, timeoutPromise]) as AxiosResponse<{
+        choices: Array<{
+          message: {
+            content: string;
+          };
+        }>;
+      }>;
+
       const apiTime = PerformanceLogger.end('openaiAPI', this.logger);
 
       // 결과 처리
       PerformanceLogger.start('resultProcessing');
-      const index = parseInt(response.data.choices[0].message.content.trim());
+      const index = parseInt(openaiResponse.data.choices[0]?.message?.content?.trim() ?? '0');
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
 
       // 비동기로 학습 처리
@@ -87,11 +108,15 @@ export class GrammarService {
       return result;
 
     } catch (error) {
+      // OpenAI API 타임아웃 또는 다른 에러 발생 시
+      this.logger.error('OpenAI API error, falling back to best guess', error);
       PerformanceLogger.end('findMostNaturalSentence', this.logger);
+
+      const bestGuess = await this.grammarLearningService.getBestGuess(sentences);
       return {
-        correctSentence: sentences[0],
-        correctIndex: 0,
-        sentenceScores: sentences.map((_, i) => i === 0 ? 100 : 0)
+        correctSentence: bestGuess.sentence,
+        correctIndex: bestGuess.index,
+        sentenceScores: sentences.map((_, i) => i === bestGuess.index ? 100 : 0)
       };
     }
   }

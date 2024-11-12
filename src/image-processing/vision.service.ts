@@ -29,13 +29,22 @@ export class VisionService {
       const startTime = Date.now();
   
       const optimizedBuffer = await sharp(imageBuffer)
-        .resize(1024, null, { withoutEnlargement: true })
-        .jpeg({ quality: 85 })
-        .toBuffer();
+      .resize({ 
+        width: 1024,
+        height: 1024,
+        fit: 'inside',
+        withoutEnlargement: true 
+      })
+      .jpeg({ 
+        quality: 85,
+        progressive: true,
+        optimizeCoding: true
+      })
+      .toBuffer();
   
       this.logger.log(`Image optimization took ${Date.now() - startTime}ms`);
   
-      const response = await axios.post(
+      const visionPromise = axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
@@ -47,10 +56,15 @@ export class VisionService {
               model: 'builtin/latest'
             }]
           }]
-        }
+        },
+        { timeout: 8000 }  // 8초 타임아웃
       );
   
       this.logger.log(`Vision API request took ${Date.now() - startTime}ms`);
+
+      const [response] = await Promise.all([
+        visionPromise
+      ]);
   
       const textAnnotations = response.data.responses[0]?.textAnnotations;
       if (!textAnnotations || textAnnotations.length === 0) {

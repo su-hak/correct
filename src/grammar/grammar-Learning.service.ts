@@ -27,6 +27,40 @@ export class GrammarLearningService {
     this.initializationPromise = this.initializeCache();
   }
 
+
+  // grammar-learning.service.ts에 추가
+public async getBestGuess(sentences: string[]): Promise<{
+  sentence: string;
+  index: number;
+}> {
+  try {
+    // 문법 점수 계산
+    const grammarScores = sentences.map(sentence => this.calculateGrammarScore(sentence));
+    
+    // 가장 높은 문법 점수를 가진 문장 선택
+    let bestIndex = 0;
+    let bestScore = grammarScores[0];
+
+    for (let i = 1; i < grammarScores.length; i++) {
+      if (grammarScores[i] > bestScore) {
+        bestScore = grammarScores[i];
+        bestIndex = i;
+      }
+    }
+
+    return {
+      sentence: sentences[bestIndex],
+      index: bestIndex
+    };
+  } catch (error) {
+    // 에러 발생 시 첫 번째 문장 반환
+    return {
+      sentence: sentences[0],
+      index: 0
+    };
+  }
+}
+
   private async initializeCache() {
     if (this.cacheInitialized) return;
     
