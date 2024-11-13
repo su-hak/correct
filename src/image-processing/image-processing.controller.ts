@@ -1,10 +1,12 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException, HttpException, HttpStatus, Get, Param, NotFoundException, InternalServerErrorException, Res } from '@nestjs/common';
+import { Response } from 'express';  // Express Response 타입 추가
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VisionService } from './vision.service';
 import { GrammarService } from '../grammar/grammar.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Queue } from 'bull';
-import { InjectQueue } from '@nestjs/bull'
+import { InjectQueue } from '@nestjs/bull';
+import * as sharp from 'sharp';
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -18,99 +20,55 @@ export class ImageProcessingController {
     ) { }
 
     @Post('analyze')
-    @UseInterceptors(FileInterceptor('image', {
-        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 제한
-        fileFilter: (req, file, callback) => {
-            if (!file.mimetype.match(/^image\/(jpeg|png|jpg)$/)) {
-                return callback(new BadRequestException('Only image files are allowed'), false);
-            }
-            callback(null, true);
-        }
-    }))
-    async analyzeImage(@UploadedFile() file: Express.Multer.File) {
+    @UseInterceptors(FileInterceptor('image'))
+    async analyzeImage(
+        @UploadedFile() file: Express.Multer.File,
+        @Res() res: Response
+    ) {
         try {
-            this.logger.debug(`File details: 
-                Mimetype: ${file?.mimetype}
-                Size: ${file?.size} bytes
-                Original name: ${file?.originalname}
-            `);
+            // 1. SSE 헤더 설정
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
 
-            if (!file || !file.buffer || file.buffer.length === 0) {
-                throw new BadRequestException('Invalid file uploaded');
-            }
-
-            // 이미지 파일 검증
-            if (!this.isValidImageBuffer(file.buffer)) {
-                throw new BadRequestException('Invalid image format');
-            }
-
-            const startTime = Date.now();
-            
-            // Vision API 호출 및 결과 로깅
+            // 2. Vision API 호출 및 즉시 응답
             const visionResult = await this.visionService.detectTextInImage(file.buffer);
-            
-            this.logger.debug(`Vision API Response:
-                Processing time: ${Date.now() - startTime}ms
-                Detected sentences: ${JSON.stringify(visionResult.sentences)}
-                Number of sentences: ${visionResult.sentences.length}
-                Bounding boxes: ${JSON.stringify(visionResult.boundingBoxes)}
-            `);
+            res.write(`data: ${JSON.stringify({
+                type: 'sentences',
+                data: visionResult.sentences
+            })}\n\n`);
 
-            // 문장이 없는 경우 상세 로그
+            // 3. 문장이 없는 경우 즉시 종료
             if (!visionResult.sentences.length) {
-                throw new HttpException({
-                    status: HttpStatus.NO_CONTENT,
-                    error: 'No text detected in the image',
-                    details: 'The image might be too blurry, poorly lit, or contain no Korean text'
-                }, HttpStatus.NO_CONTENT);
+                res.write(`data: ${JSON.stringify({
+                    type: 'error',
+                    message: 'No text detected'
+                })}\n\n`);
+                return res.end();
             }
 
-            // 문법 검사
-            const grammarResult = await this.grammarService.findMostNaturalSentence(visionResult.sentences);
-
-            const response = {
-                sentences: visionResult.sentences,
-                boundingBoxes: visionResult.boundingBoxes,
-                correctSentence: grammarResult.correctSentence || visionResult.sentences[0],
+            // 4. GPT 분석 및 즉시 응답
+            const grammarResult = await this.grammarService.findMostNaturalSentence(
+                visionResult.sentences
+            );
+            res.write(`data: ${JSON.stringify({
+                type: 'analysis',
+                data: {
                 correctIndex: grammarResult.correctIndex,
+                    correctSentence: grammarResult.correctSentence,
                 sentenceScores: grammarResult.sentenceScores
-            };
+                }
+            })}\n\n`);
 
-            this.logger.debug(`Final response: ${JSON.stringify(response)}`);
-
-            return response;
+            return res.end();
 
         } catch (error) {
-            this.logger.error('Image analysis error:', {
-                error: error.message,
-                stack: error.stack,
-                statusCode: error.status
-            });
-
-            if (error.status === HttpStatus.NO_CONTENT) {
-                return {
-                    sentences: [],
-                    boundingBoxes: [],
-                    correctSentence: '',
-                    correctIndex: -1,
-                    sentenceScores: []
-                };
-            }
-
-            throw new InternalServerErrorException(
-                `Image analysis failed: ${error.message}`
-            );
-        }
-    }
-
-    private isValidImageBuffer(buffer: Buffer): boolean {
-        // JPEG 확인
-        if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
-            return true;
-        }
-        // PNG 확인
-        if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
-            return true;
+            this.logger.error('Analysis error:', error);
+            res.write(`data: ${JSON.stringify({
+                type: 'error',
+                message: 'Analysis failed'
+            })}\n\n`);
+            return res.end();
         }
         return false;
     }

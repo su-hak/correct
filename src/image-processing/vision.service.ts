@@ -18,7 +18,9 @@ export class VisionService {
   }
 
   private isValidKoreanSentence(text: string): boolean {
-    return /[가-힣]/.test(text) && !text.includes('올바른 문장을 선택해 주세요');
+    // 기본적인 검증만 수행
+    return /[가-힣]/.test(text) && // 한글 포함
+           !text.includes('올바른 문장을 선택해 주세요');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<{
@@ -29,15 +31,22 @@ export class VisionService {
     sentenceScores: number[];
   }> {
     try {
+      // 이미지 최적화
+      const optimizedBuffer = await sharp(imageBuffer)
+        .resize(1024, null, { withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {
-              content: imageBuffer.toString('base64')
+              content: optimizedBuffer.toString('base64')
             },
             features: [{
-              type: 'TEXT_DETECTION'
+              type: 'TEXT_DETECTION',
+              model: 'builtin/latest'
             }]
           }]
         }
@@ -45,30 +54,17 @@ export class VisionService {
 
       const textAnnotations = response.data.responses[0]?.textAnnotations;
       if (!textAnnotations || textAnnotations.length === 0) {
-        return {
-          sentences: [],
-          boundingBoxes: [],
-          correctIndex: -1,
-          correctSentence: '',
-          sentenceScores: []
-        };
+        return this.getEmptyResult();
       }
 
-      // 문장 추출 및 필터링
+      // 문장 추출 및 간단한 필터링
       const sentences = textAnnotations[0].description
         .split('\n')
         .map(s => s.trim())
-        .filter(s => s && this.isValidKoreanSentence(s))
-        .slice(0, 5);
+        .filter(s => s && this.isValidKoreanSentence(s));
 
       if (sentences.length === 0) {
-        return {
-          sentences: [],
-          boundingBoxes: [],
-          correctIndex: -1,
-          correctSentence: '',
-          sentenceScores: []
-        };
+        return this.getEmptyResult();
       }
 
       // 문법 평가
@@ -84,7 +80,17 @@ export class VisionService {
 
     } catch (error) {
       this.logger.error('Vision API error:', error);
-      throw error;
+      return this.getEmptyResult();
     }
+  }
+
+  private getEmptyResult() {
+    return {
+      sentences: [],
+      boundingBoxes: [],
+      correctIndex: -1,
+      correctSentence: '',
+      sentenceScores: []
+    };
   }
 }
