@@ -26,20 +26,25 @@ export class ImageProcessingController {
         @Res() res: Response
     ) {
         try {
-            // 1. SSE 헤더 설정
+            // SSE 헤더 설정
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
 
-            // 2. Vision API 호출 및 즉시 응답
-            const visionResult = await this.visionService.detectTextInImage(file.buffer);
+            // 초기 상태 전송
             res.write(`data: ${JSON.stringify({
-                type: 'sentences',
-                data: visionResult.sentences
+                status: 'processing',
+                step: 'initialization',
+                message: '이미지 처리 시작...'
             })}\n\n`);
-            
-            // 3. 문장이 없는 경우 즉시 종료
-            if (!visionResult.sentences.length) {
+
+            // Vision API 호출
+            this.logger.log('Starting text detection...');
+            const visionResult = await this.visionService.detectTextInImage(file.buffer);
+
+            // 문장 인식 결과 처리
+            if (!visionResult.sentences || !Array.isArray(visionResult.sentences)) {
+                this.logger.warn('No valid sentences found');
                 res.write(`data: ${JSON.stringify({
                     type: 'error',
                     message: 'No text detected'
@@ -47,18 +52,40 @@ export class ImageProcessingController {
                 return res.end();
             }
 
-            // 4. GPT 분석 및 즉시 응답
-            const grammarResult = await this.grammarService.findMostNaturalSentence(
-                visionResult.sentences
-            );
+            // 문장 인식 결과 전송
             res.write(`data: ${JSON.stringify({
-                type: 'analysis',
+                type: 'sentences',
                 data: {
-                    correctIndex: grammarResult.correctIndex,
-                    correctSentence: grammarResult.correctSentence,
-                    sentenceScores: grammarResult.sentenceScores
+                    sentences: visionResult.sentences
                 }
             })}\n\n`);
+
+            // 문법 분석 시작
+            if (visionResult.sentences.length > 0) {
+                try {
+                    const grammarResult = await this.grammarService.findMostNaturalSentence(
+                        visionResult.sentences
+                    );
+
+                    // 최종 결과 전송
+                    res.write(`data: ${JSON.stringify({
+                        type: 'result',
+                        data: {
+                            sentences: visionResult.sentences,
+                            correctIndex: grammarResult.correctIndex,
+                            correctSentence: grammarResult.correctSentence,
+                            sentenceScores: grammarResult.sentenceScores
+                        }
+                    })}\n\n`);
+
+                } catch (grammarError) {
+                    this.logger.error('Grammar analysis failed:', grammarError);
+                    res.write(`data: ${JSON.stringify({
+                        type: 'error',
+                        message: 'Grammar analysis failed'
+                    })}\n\n`);
+                }
+            }
 
             return res.end();
 
