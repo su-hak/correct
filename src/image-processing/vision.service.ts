@@ -17,23 +17,19 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
-    const startTime = Date.now();
+    const totalStart = Date.now();
     try {
-      // 이미지 전처리 시간 측정
-      const preprocessStart = Date.now();
+      // 이미지 최적화 시간
+      const optimizeStart = Date.now();
       const optimizedBuffer = await sharp(imageBuffer)
-        .resize(1920, 1080, {
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .sharpen()
-        .normalize()
+        .resize(1024, null, { withoutEnlargement: true })
+        .jpeg({ quality: 85 })
         .toBuffer();
-      this.logger.log(`Image preprocessing took ${Date.now() - preprocessStart}ms`);
+      this.logger.log(`Image optimization took: ${Date.now() - optimizeStart}ms`);
 
-      // Vision API 호출 시간 측정
+      // Vision API 요청 시간
       const apiStart = Date.now();
-      const visionResponse = await axios.post(
+      const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
@@ -43,72 +39,49 @@ export class VisionService {
             features: [{
               type: 'TEXT_DETECTION',
               model: 'builtin/latest'
-            }],
-            imageContext: {
-              languageHints: ['ko']
-            }
+            }]
           }]
         }
       );
-      this.logger.log(`Vision API call took ${Date.now() - apiStart}ms`);
+      this.logger.log(`Vision API call took: ${Date.now() - apiStart}ms`);
 
-      const textAnnotations = visionResponse.data.responses[0]?.textAnnotations;
-      
+      // 텍스트 처리 시간
+      const processStart = Date.now();
+      const textAnnotations = response.data.responses[0]?.textAnnotations;
+
       if (!textAnnotations || textAnnotations.length === 0) {
         return {
-          type: 'error',
-          message: '텍스트를 인식할 수 없습니다.'
+          sentences: [],
+          error: 'No text detected'
         };
       }
 
-      // 문장 처리 시간 측정
-      const processingStart = Date.now();
-      const allLines = textAnnotations[0].description
+      const sentences = textAnnotations[0].description
         .split('\n')
-        .map(line => line.trim());
+        .map(s => s.trim())
+        .filter(s => s && this.isValidKoreanSentence(s));
+      this.logger.log(`Text processing took: ${Date.now() - processStart}ms`);
 
-      // 가이드라인 영역의 문장만 필터링 (지정된 패턴과 한글만 포함)
-      const sentences = allLines
-        .filter(line => {
-          // 필수 조건: 2글자 이상의 한글 포함
-          if (line.length < 2 || !/[가-힣]/.test(line)) return false;
-          
-          // 제외할 패턴들
-          const excludePatterns = [
-            /^[A-Za-z\s]+$/,  // 영문만
-            /^[0-9\s]+$/,     // 숫자만
-            /ChatGPT/i,       // ChatGPT 관련
-            /^데이터/,        // 데이터로 시작
-            /GPT/i,           // GPT 포함
-            /[×÷+\-=]/       // 수학 기호
-          ];
-          
-          return !excludePatterns.some(pattern => pattern.test(line));
-        });
-
-      this.logger.log(`Text processing took ${Date.now() - processingStart}ms`);
-      this.logger.log(`Total processing took ${Date.now() - startTime}ms`);
-
-      if (sentences.length < 2) {
-        return {
-          type: 'error',
-          message: '분석할 문장을 찾을 수 없습니다.'
-        };
-      }
-
+      this.logger.log(`Total Vision Service took: ${Date.now() - totalStart}ms`);
       return {
-        type: 'result',
-        data: {
-          sentences: sentences.slice(0, 5)
-        }
+        sentences: sentences.slice(0, 5)
       };
 
     } catch (error) {
-      this.logger.error(`Error in Vision Service (${Date.now() - startTime}ms):`, error);
+      this.logger.error(`Vision Service failed after ${Date.now() - totalStart}ms:`, error);
       return {
-        type: 'error',
-        message: '이미지 분석 중 오류가 발생했습니다.'
+        sentences: [],
+        error: 'Analysis failed'
       };
     }
+  }
+
+  private isValidKoreanSentence(text: string): boolean {
+    return (
+      text.length >= 2 &&
+      /[가-힣]/.test(text) &&
+      !/^\d+$/.test(text) &&
+      !text.includes('올바른 문장을 선택해 주세요')
+    );
   }
 }

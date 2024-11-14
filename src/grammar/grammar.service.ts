@@ -18,7 +18,9 @@ export class GrammarService {
     correctIndex: number;
     sentenceScores: number[];
   }> {
+    const start = Date.now();
     try {
+      const gptStart = Date.now();
       this.logger.debug('Input sentences:', sentences);
 
       const response = await axios.post(
@@ -48,10 +50,14 @@ export class GrammarService {
           timeout: 5000
         }
       );
+      this.logger.log(`GPT API call took: ${Date.now() - gptStart}ms`);
 
+      const processStart = Date.now();
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
-
+      this.logger.log(`Result processing took: ${Date.now() - processStart}ms`);
+  
+      this.logger.log(`Total Grammar Service took: ${Date.now() - start}ms`);
       return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
@@ -60,6 +66,7 @@ export class GrammarService {
 
     } catch (error) {
       this.logger.error('Error in findMostNaturalSentence:', error);
+      this.logger.error(`Grammar Service failed after ${Date.now() - start}ms:`, error);
       return {
         correctSentence: sentences[0],
         correctIndex: 0,
