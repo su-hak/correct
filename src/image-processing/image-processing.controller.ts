@@ -15,7 +15,7 @@ export class ImageProcessingController {
   constructor(
     private readonly visionService: VisionService,
     private readonly grammarService: GrammarService,
-  ) {}
+  ) { }
 
   @Post('analyze')
   @UseInterceptors(FileInterceptor('image'))
@@ -29,13 +29,32 @@ export class ImageProcessingController {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
+      // 초기 상태 전송
+      res.write(`data: ${JSON.stringify({
+        status: 'processing',
+        message: '이미지 처리 시작...'
+      })}\n\n`);
+
       // Vision API 호출
       const visionResult = await this.visionService.detectTextInImage(file.buffer);
-      
-      if (visionResult.type === 'error') {
-        res.write(`data: ${JSON.stringify(visionResult)}\n\n`);
+
+      // 문장 인식 실패 시
+      if (!visionResult.sentences || visionResult.sentences.length === 0) {
+        this.logger.warn('No valid sentences found');
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: 'No text detected'
+        })}\n\n`);
         return res.end();
       }
+
+      // 문장 인식 결과 전송
+      res.write(`data: ${JSON.stringify({
+        type: 'sentences',
+        data: {
+          sentences: visionResult.sentences
+        }
+      })}\n\n`);
 
       // 문법 분석
       const grammarResult = await this.grammarService.findMostNaturalSentence(
@@ -48,7 +67,8 @@ export class ImageProcessingController {
         data: {
           sentences: visionResult.sentences,
           correctIndex: grammarResult.correctIndex,
-          correctSentence: grammarResult.correctSentence
+          correctSentence: grammarResult.correctSentence,
+          sentenceScores: grammarResult.sentenceScores
         }
       })}\n\n`);
 
@@ -58,7 +78,7 @@ export class ImageProcessingController {
       this.logger.error('Analysis error:', error);
       res.write(`data: ${JSON.stringify({
         type: 'error',
-        message: 'Analysis failed'
+        message: error.message || 'Analysis failed'
       })}\n\n`);
       return res.end();
     }

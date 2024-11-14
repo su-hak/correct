@@ -42,37 +42,25 @@ export class VisionService {
       
       if (!textAnnotations || textAnnotations.length === 0) {
         return {
-          type: 'error',
-          message: 'No text detected'
+          sentences: [],
+          error: 'No text detected'
         };
       }
 
-      // 문장 추출 및 필터링
       const sentences = textAnnotations[0].description
         .split('\n')
         .map(s => s.trim())
         .filter(s => s && this.isValidKoreanSentence(s));
 
-      if (sentences.length < 2) {
-        return {
-          type: 'error',
-          message: 'Not enough valid sentences'
-        };
-      }
-
-      // 최대 5개 문장만 선택
-      const finalSentences = sentences.slice(0, 5);
-      
       return {
-        sentences: finalSentences,
-        type: 'success'
+        sentences: sentences.slice(0, 5)
       };
 
     } catch (error) {
       this.logger.error('Vision API error:', error);
       return {
-        type: 'error',
-        message: 'Analysis failed'
+        sentences: [],
+        error: 'Analysis failed'
       };
     }
   }
