@@ -29,11 +29,17 @@ export class GrammarService {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: "gpt-4-1106-preview",
+          model: "gpt-3.5-turbo-1106",
           messages: [
             {
               role: "system",
-              content: "주어진 문장들 중 가장 자연스럽고 맞춤법이 정확한 문장의 인덱스만 숫자로 답하세요. 기준은 다음과 같습니다:\n1. 맞춤법이 정확한가\n2. 주어+목적어+서술어 순서가 맞는가\n3. 도치법이 없는가\n4. 조사와 어미가 올바른가"
+              content: `당신은 한국어 문법 전문가입니다. 
+              주어진 문장들 중에서 다음 기준에 모두 부합하는 가장 자연스러운 문장을 선택하세요:
+              1. 표준 한국어 맞춤법을 준수하는가
+              2. 주어, 목적어, 서술어의 문장 성분이 올바른가
+              3. 조사와 어미가 정확하게 사용되었는가
+              4. 의미가 명확하고 자연스러운가
+              5. 비문이나 파편적인 문장은 아닌가`
             },
             {
               role: "user",
@@ -60,6 +66,7 @@ export class GrammarService {
       const processStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
+      
       if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Result processing took: ${Date.now() - processStart}ms`);
       }
@@ -67,6 +74,7 @@ export class GrammarService {
       if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Total Grammar Service took: ${Date.now() - start}ms`);
       }
+
       return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
