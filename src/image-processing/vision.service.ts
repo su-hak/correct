@@ -4,6 +4,7 @@ import axios from 'axios';
 import * as sharp from 'sharp';
 import { GrammarService } from '../grammar/grammar.service';
 import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
+import stringSimilarity from 'string-similarity';
 
 @Injectable()
 export class VisionService {
@@ -105,11 +106,15 @@ export class VisionService {
   }
 
   private isValidKoreanSentence(text: string): boolean {
+    const referenceText = '올바른 문장을 선택해 주세요';
+    const similarityThreshold = 0.7;
+    const similarity = stringSimilarity.compareTwoStrings(text, referenceText);
+  
     return (
       text.length >= 2 &&
       /[가-힣]/.test(text) && 
       !/^\d+$/.test(text) &&
-      !text.includes('올바른 문장을 선택해 주세요')
+      similarity < similarityThreshold
     );
   }
 }
