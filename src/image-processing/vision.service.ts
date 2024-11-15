@@ -17,38 +17,53 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
-    const totalStart = Date.now();
+    const start = Date.now();
     try {
-      // 이미지 최적화 시간
+      // 1. 이미지 최적화 및 바이너리로 변환
       const optimizeStart = Date.now();
-      const optimizedBuffer = await sharp(imageBuffer)
-        .resize(1024, null, { withoutEnlargement: true })
-        .jpeg({ quality: 85 })
+      const binaryBuffer = await sharp(imageBuffer)
+        .resize(800, null, { 
+          withoutEnlargement: true,
+          kernel: sharp.kernel.nearest
+        })
+        .jpeg({ quality: 80 })
         .toBuffer();
       this.logger.log(`Image optimization took: ${Date.now() - optimizeStart}ms`);
 
-      // Vision API 요청 시간
+      // 2. 바이너리를 base64로 인코딩
+      const base64Start = Date.now();
+      const base64Image = binaryBuffer.toString('base64');
+      this.logger.log(`Base64 encoding took: ${Date.now() - base64Start}ms`);
+
+      // 3. Vision API 호출
       const apiStart = Date.now();
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {
-              content: optimizedBuffer.toString('base64')
+              content: base64Image
             },
             features: [{
               type: 'TEXT_DETECTION',
               model: 'builtin/latest'
-            }]
+            }],
+            imageContext: {
+              languageHints: ['ko']
+            }
           }]
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept-Encoding': 'gzip'
+          },
+          timeout: 5000
         }
       );
       this.logger.log(`Vision API call took: ${Date.now() - apiStart}ms`);
 
-      // 텍스트 처리 시간
-      const processStart = Date.now();
       const textAnnotations = response.data.responses[0]?.textAnnotations;
-
       if (!textAnnotations || textAnnotations.length === 0) {
         return {
           sentences: [],
@@ -56,19 +71,21 @@ export class VisionService {
         };
       }
 
+      const processStart = Date.now();
       const sentences = textAnnotations[0].description
         .split('\n')
         .map(s => s.trim())
         .filter(s => s && this.isValidKoreanSentence(s));
+      
       this.logger.log(`Text processing took: ${Date.now() - processStart}ms`);
+      this.logger.log(`Total Vision Service took: ${Date.now() - start}ms`);
 
-      this.logger.log(`Total Vision Service took: ${Date.now() - totalStart}ms`);
       return {
         sentences: sentences.slice(0, 5)
       };
 
     } catch (error) {
-      this.logger.error(`Vision Service failed after ${Date.now() - totalStart}ms:`, error);
+      this.logger.error(`Vision Service failed after ${Date.now() - start}ms:`, error);
       return {
         sentences: [],
         error: 'Analysis failed'
@@ -79,7 +96,7 @@ export class VisionService {
   private isValidKoreanSentence(text: string): boolean {
     return (
       text.length >= 2 &&
-      /[가-힣]/.test(text) &&
+      /[가-힣]/.test(text) && 
       !/^\d+$/.test(text) &&
       !text.includes('올바른 문장을 선택해 주세요')
     );
