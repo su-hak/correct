@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
 
 @Injectable()
 export class GrammarService {
@@ -18,10 +19,12 @@ export class GrammarService {
     correctIndex: number;
     sentenceScores: number[];
   }> {
-    const start = Date.now();
+    const start = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
     try {
-      const gptStart = Date.now();
+      const gptStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.debug('Input sentences:', sentences);
+      }
 
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
@@ -50,14 +53,20 @@ export class GrammarService {
           timeout: 5000
         }
       );
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`GPT API call took: ${Date.now() - gptStart}ms`);
+      }
 
-      const processStart = Date.now();
+      const processStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const index = parseInt(response.data.choices[0].message.content.trim());
       const validIndex = !isNaN(index) && index >= 0 && index < sentences.length ? index : 0;
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Result processing took: ${Date.now() - processStart}ms`);
-  
+      }
+
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Total Grammar Service took: ${Date.now() - start}ms`);
+      }
       return {
         correctSentence: sentences[validIndex],
         correctIndex: validIndex,
@@ -65,8 +74,12 @@ export class GrammarService {
       };
 
     } catch (error) {
-      this.logger.error('Error in findMostNaturalSentence:', error);
-      this.logger.error(`Grammar Service failed after ${Date.now() - start}ms:`, error);
+      if (ENABLE_ERROR_LOGS) {  // 에러 로그는 별도 관리
+        this.logger.error('Grammar Service error:', error);
+      }
+      if (ENABLE_PERFORMANCE_LOGS) {
+        this.logger.error(`Failed after ${Date.now() - start}ms`);
+      }
       return {
         correctSentence: sentences[0],
         correctIndex: 0,

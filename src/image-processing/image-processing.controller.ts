@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
 import * as sharp from 'sharp';
+import { ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
 
 @Controller('image-processing')
 export class ImageProcessingController {
@@ -75,7 +76,9 @@ export class ImageProcessingController {
       return res.end();
 
     } catch (error) {
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.error('Analysis error:', error);
+      }
       res.write(`data: ${JSON.stringify({
         type: 'error',
         message: error.message || 'Analysis failed'

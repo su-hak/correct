@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as sharp from 'sharp';
 import { GrammarService } from '../grammar/grammar.service';
+import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
 
 @Injectable()
 export class VisionService {
@@ -17,10 +18,10 @@ export class VisionService {
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
-    const start = Date.now();
+    const start = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
     try {
       // 1. 이미지 최적화 및 바이너리로 변환
-      const optimizeStart = Date.now();
+      const optimizeStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const binaryBuffer = await sharp(imageBuffer)
         .resize(800, null, { 
           withoutEnlargement: true,
@@ -28,15 +29,18 @@ export class VisionService {
         })
         .jpeg({ quality: 80 })
         .toBuffer();
+        if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Image optimization took: ${Date.now() - optimizeStart}ms`);
+        }
 
       // 2. 바이너리를 base64로 인코딩
-      const base64Start = Date.now();
+      const base64Start = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const base64Image = binaryBuffer.toString('base64');
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Base64 encoding took: ${Date.now() - base64Start}ms`);
-
+      }
       // 3. Vision API 호출
-      const apiStart = Date.now();
+      const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
@@ -61,8 +65,9 @@ export class VisionService {
           timeout: 5000
         }
       );
+      if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Vision API call took: ${Date.now() - apiStart}ms`);
-
+      }
       const textAnnotations = response.data.responses[0]?.textAnnotations;
       if (!textAnnotations || textAnnotations.length === 0) {
         return {
@@ -71,21 +76,27 @@ export class VisionService {
         };
       }
 
-      const processStart = Date.now();
+      const processStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const sentences = textAnnotations[0].description
         .split('\n')
         .map(s => s.trim())
         .filter(s => s && this.isValidKoreanSentence(s));
       
+        if (ENABLE_PERFORMANCE_LOGS) {
       this.logger.log(`Text processing took: ${Date.now() - processStart}ms`);
       this.logger.log(`Total Vision Service took: ${Date.now() - start}ms`);
-
+        }
       return {
         sentences: sentences.slice(0, 5)
       };
 
     } catch (error) {
-      this.logger.error(`Vision Service failed after ${Date.now() - start}ms:`, error);
+      if (ENABLE_ERROR_LOGS) {  // 에러 로그는 별도 설정으로 관리
+        this.logger.error('Vision Service error:', error);
+      }
+      if (ENABLE_PERFORMANCE_LOGS) {
+        this.logger.error(`Failed after ${Date.now() - start}ms`);
+      }
       return {
         sentences: [],
         error: 'Analysis failed'
