@@ -77,7 +77,51 @@ export class UsersService {
     await this.usersRepository.save(user);
   }
 
-  @Cron('* * * * *')  // 매 분마다 실행
+  // 베트남 시간 00:00에 무조건 실행되는 Cron Job
+  @Cron('0 0 0 * * *', {
+    timeZone: 'Asia/Ho_Chi_Minh'
+  })
+  async validateTokensAtMidnight() {
+    try {
+      console.log('Starting midnight token validation...');
+      const now = new Date();
+      
+      // 모든 유저의 토큰 상태 검증 (앱 실행 여부와 무관)
+      const expiredUsers = await this.usersRepository.find({
+        where: {
+          expiryDate: LessThan(now)
+        }
+      });
+
+      if (expiredUsers.length > 0) {
+        await this.usersRepository
+          .createQueryBuilder()
+          .update(User)
+          .set({ 
+            isLoggedIn: false,
+            token: '',
+          })
+          .where("expiryDate < :now", { now })
+          .execute();
+
+        console.log(`Logged out ${expiredUsers.length} expired users`);
+      }
+    } catch (error) {
+      console.error('Error during midnight validation:', error);
+    }
+  }
+
+  // 주간 시간대에는 토큰 검증 없이 진행
+  async checkAuthStatus(id: string, token: string): Promise<boolean> {
+    // 기본적인 존재 여부만 확인
+    const user = await this.usersRepository.findOne({
+      where: { id, token },
+      select: ['id']  // 필요한 필드만 조회
+    });
+    
+    return !!user;
+  }
+
   async checkInactiveUsers() {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const inactiveUsers = await this.usersRepository.find({

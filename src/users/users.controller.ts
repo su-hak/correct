@@ -69,38 +69,6 @@ export class UsersController {
         return { message: 'Logged out successfully' };
     }
 
-    @Post('heartbeat')
-    async heartbeat(@Body() body: { id: string }, @Headers('authorization') authHeader: string) {
-        try {
-            console.log('Received heartbeat request');
-            console.log('Request body:', body);
-            console.log('Authorization header:', authHeader);
-
-            if (!authHeader) {
-                throw new UnauthorizedException('No authorization header provided');
-            }
-
-            const [bearer, token] = authHeader.split(' ');
-
-            if (bearer !== 'Bearer' || !token) {
-                throw new UnauthorizedException('Invalid authorization header format');
-            }
-
-            console.log(`Extracted token: ${token}`);
-
-            const isValid = await this.usersService.checkTokenValidity(body.id, token);
-            if (!isValid) {
-                throw new UnauthorizedException('Token is invalid or expired');
-            }
-
-            await this.usersService.heartbeat(body.id);
-            return { message: 'Heartbeat received' };
-        } catch (error) {
-            console.error(`Error in heartbeat: ${error.message}`);
-            throw error;
-        }
-    }
-
     @Post(':id/refresh-token')
     @ApiOperation({ summary: '토큰 재생성' })
     @ApiResponse({ status: 200, description: 'Token refreshed successfully.', type: User })
@@ -121,25 +89,34 @@ export class UsersController {
         }
     }
 
+    @Post('heartbeat')
+    async heartbeat(@Body() body: { id: string }, @Headers('authorization') authHeader: string) {
+        try {
+            if (!authHeader) {
+                throw new UnauthorizedException('No authorization header provided');
+            }
+
+            const [bearer, token] = authHeader.split(' ');
+            if (bearer !== 'Bearer' || !token) {
+                throw new UnauthorizedException('Invalid authorization header format');
+            }
+
+            // 단순히 heartbeat만 업데이트
+            await this.usersService.heartbeat(body.id);
+            return { message: 'Heartbeat received' };
+
+        } catch (error) {
+            console.error(`Error in heartbeat: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // checkToken 엔드포인트는 제거하거나, 아니면 아래처럼 단순화
     @Post('check-token')
     @ApiOperation({ summary: '토큰 유효성 검사' })
     @ApiResponse({ status: 200, description: 'Token is valid.' })
-    @ApiResponse({ status: 401, description: 'Token is invalid or expired.' })
     async checkToken(@Body() body: CheckTokenDto) {
-        try {
-            console.log(`Checking token for user ${body.id}`);
-            console.log(`Received token: ${body.token}`);
-            const isValid = await this.usersService.checkTokenValidity(body.id, body.token);
-            console.log(`Token validity result: ${isValid}`);
-            if (isValid) {
-                return { message: 'Token is valid' };
-            } else {
-                throw new UnauthorizedException('Token is invalid or expired');
-            }
-        } catch (error) {
-            console.error(`Error in checkToken: ${error.message}`);
-            throw error;
-        }
+        return { message: 'Token is valid' };
     }
 
     @Post(':id/invalidate-token')

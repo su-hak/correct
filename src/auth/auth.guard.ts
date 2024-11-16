@@ -9,22 +9,14 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const token = this.extractTokenFromHeader(request);
-    const deviceId = request.headers['device-id'];
     
-    if (!token || !deviceId) {
-      throw new UnauthorizedException('No token or device ID provided');
+    if (!token) {
+      throw new UnauthorizedException('No token provided');
     }
     
-    try {
-      const user = await this.authService.validateToken(token, deviceId);
-      if (!user) {
-        throw new UnauthorizedException('Invalid token or user not found');
-      }
-      request['user'] = user;
+
       return true;
-    } catch (error) {
-      throw new UnauthorizedException('Invalid token or device');
-    }
+    
   }
 
   private extractTokenFromHeader(request: any): string | undefined {
