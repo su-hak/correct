@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -214,13 +214,24 @@ export class UsersService {
     return savedUser;
   }
 
-  // UsersService.ts에 추가
-  async extendTokenExpiration(id: string, extendTokenDto: ExtendTokenExpirationDto): Promise<User> {
-    const user = await this.usersRepository.findOne({ where: { id } });
-    if (!user) {
+// UsersService.ts의 extendTokenExpiration 메서드 수정
+async extendTokenExpiration(id: string, extendTokenDto: ExtendTokenExpirationDto): Promise<User> {
+  const user = await this.usersRepository.findOne({ where: { id } });
+  if (!user) {
       throw new NotFoundException('User not found');
-    }
-    user.expiryDate = this.calculateExpiryDate(extendTokenDto.expiryDuration, extendTokenDto.expiryUnit);
-    return this.usersRepository.save(user);
   }
+  
+  // 현재 만료일이 없는 경우 예외 처리
+  if (!user.expiryDate) {
+      throw new BadRequestException('No valid expiry date exists');
+  }
+
+  const multiplier = extendTokenDto.expiryUnit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const extensionMs = extendTokenDto.expiryDuration * multiplier;
+  
+  // 기존 만료일에 연장 기간을 추가
+  user.expiryDate = new Date(user.expiryDate.getTime() + extensionMs);
+  
+  return this.usersRepository.save(user);
+}
 }
