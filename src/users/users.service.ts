@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from './entities/users.entity';
-import { CreateUserDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CreateUserDto, ExtendTokenExpirationDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -85,7 +85,7 @@ export class UsersService {
     try {
       console.log('Starting midnight token validation...');
       const now = new Date();
-      
+
       // 모든 유저의 토큰 상태 검증 (앱 실행 여부와 무관)
       const expiredUsers = await this.usersRepository.find({
         where: {
@@ -97,7 +97,7 @@ export class UsersService {
         await this.usersRepository
           .createQueryBuilder()
           .update(User)
-          .set({ 
+          .set({
             isLoggedIn: false,
             token: '',
           })
@@ -118,7 +118,7 @@ export class UsersService {
       where: { id, token },
       select: ['id']  // 필요한 필드만 조회
     });
-    
+
     return !!user;
   }
 
@@ -212,5 +212,15 @@ export class UsersService {
     const savedUser = await this.usersRepository.save(user);
     console.log('Saved user:', savedUser);
     return savedUser;
+  }
+
+  // UsersService.ts에 추가
+  async extendTokenExpiration(id: string, extendTokenDto: ExtendTokenExpirationDto): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.expiryDate = this.calculateExpiryDate(extendTokenDto.expiryDuration, extendTokenDto.expiryUnit);
+    return this.usersRepository.save(user);
   }
 }

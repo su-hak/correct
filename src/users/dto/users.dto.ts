@@ -106,3 +106,14 @@ export class InvalidateTokenDto {
   @IsNotEmpty()
   confirm: boolean;
 }
+
+export class ExtendTokenExpirationDto {
+  expiryDuration: number;
+  @ApiProperty({ 
+    enum: ['hours', 'days'], 
+    description: '토큰 유효 기간 단위',
+    example: 'days'
+  })
+  @IsEnum(['hours', 'days'])
+  expiryUnit: 'hours' | 'days';
+}

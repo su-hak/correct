@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UnauthorizedException, HttpCode, HttpStatus, HttpException, NotFoundException, Headers, BadRequestException, Req } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/users.entity';
-import { CheckTokenDto, CreateUserDto, DeleteTokenExpirationDto, HeartbeatDto, InvalidateTokenDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
+import { CheckTokenDto, CreateUserDto, DeleteTokenExpirationDto, ExtendTokenExpirationDto, HeartbeatDto, InvalidateTokenDto, LoginUserDto, LogoutUserDto, RefreshTokenDto } from './dto/users.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from 'src/auth/auth.controller';
 
@@ -155,4 +155,14 @@ export class UsersController {
         return this.usersService.remove(id);
     }
 
+    @Post(':id/extend-token')
+    @ApiOperation({ summary: '토큰 기간 연장' })
+    @ApiResponse({ status: 200, description: 'Token expiration extended successfully' })
+    async extendTokenExpiration(
+        @Param('id') id: string,
+        @Body() extendTokenDto: ExtendTokenExpirationDto
+    ) {
+        const user = await this.usersService.extendTokenExpiration(id, extendTokenDto);
+        return { token: user.token, expiryDate: user.expiryDate };
+    }
 }
