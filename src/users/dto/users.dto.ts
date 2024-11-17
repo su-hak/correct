@@ -108,7 +108,17 @@ export class InvalidateTokenDto {
 }
 
 export class ExtendTokenExpirationDto {
+  @ApiProperty({ 
+    example: 30, 
+    description: '토큰 유효 기간',
+    minimum: 1,
+    maximum: 8760  // 1년을 시간으로 표현 (365일 * 24시간)
+  })
+  @IsInt()
+  @Min(1)
+  @Max(8760)
   expiryDuration: number;
+  
   @ApiProperty({ 
     enum: ['hours', 'days'], 
     description: '토큰 유효 기간 단위',
