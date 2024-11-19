@@ -25,7 +25,7 @@ import { CacheModule } from '@nestjs/cache-manager';
           password: process.env.MYSQLPASSWORD,
           database: process.env.MYSQLDATABASE,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
-          synchronize: true,
+          synchronize: false,
           logging: true,
           logger: 'advanced-console',
           ssl: {
