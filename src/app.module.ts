@@ -9,8 +9,6 @@ import { generateSecret } from './utils/secret-generator';
 import { BullModule } from '@nestjs/bull';
 import { ImageProcessingModule } from './image-processing/image-processing.module';
 import { CacheModule } from '@nestjs/cache-manager';
-import { CreateGrammarLearning1699262400000 } from './migrations/1699262400000-CreateGrammarLearning';
-import { CreateGrammarLearning1699353600000 } from './migrations/1699353600000-CreateGrammarLearning';
 
 @Module({
   imports: [
