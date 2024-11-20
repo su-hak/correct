@@ -5,6 +5,7 @@ import * as sharp from 'sharp';
 import { GrammarService } from '../grammar/grammar.service';
 import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
 import { OptimizedHttpService } from 'src/shared/optimized-http.service';
+import * as https from 'https';
 
 @Injectable()
 export class VisionService {
@@ -18,7 +19,11 @@ export class VisionService {
     private optimizedHttpService: OptimizedHttpService,
   ) {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
-    this.httpClient = this.optimizedHttpService.createAxiosInstance('');
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com/v1', {
+      httpsAgent: new https.Agent({  
+        rejectUnauthorized: false
+      })
+    });
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
