@@ -19,37 +19,36 @@ export class ImageProcessingController {
   ) { }
 
   // image-processing.controller.ts
-  @Post('analyze')
-  @UseInterceptors(FileInterceptor('image'))
-  async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
+@Post('analyze')
+@UseInterceptors(FileInterceptor('image'))
+async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
+  try {
+    // SSE 헤더 설정
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    try {
-      const imageResult = await this.visionService.detectTextInImage(file.buffer);
-      
-      if (!imageResult.sentences.length) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: 'No text detected' })}\n\n`);
-        return res.end();
-      }
-  
-      res.write(`data: ${JSON.stringify({
-        type: 'sentences',
-        data: { sentences: imageResult.sentences }
-      })}\n\n`);
-  
-      const grammarResult = await this.grammarService.findMostNaturalSentence(imageResult.sentences);
-      
-      res.write(`data: ${JSON.stringify({
-        type: 'result',
-        data: grammarResult
-      })}\n\n`);
-  
-      res.end();
-    } catch (error) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Analysis failed' })}\n\n`);
-      res.end();
-    }
+    // Vision API 호출
+    const visionResult = await this.visionService.detectTextInImage(file.buffer);
+    
+    // 문장 인식 결과 전송
+    res.write(`data: ${JSON.stringify({
+      type: 'sentences',
+      data: { sentences: visionResult.sentences }
+    })}\n\n`);
+
+    // 문법 분석
+    const grammarResult = await this.grammarService.findMostNaturalSentence(visionResult.sentences);
+
+    // 최종 결과 전송
+    res.write(`data: ${JSON.stringify({
+      type: 'result',
+      data: grammarResult
+    })}\n\n`);
+
+    return res.end();
+  } catch (error) {
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Analysis failed' })}\n\n`);
+    return res.end();
   }
 }
