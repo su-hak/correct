@@ -19,36 +19,37 @@ export class ImageProcessingController {
   ) { }
 
   // image-processing.controller.ts
-@Post('analyze')
-@UseInterceptors(FileInterceptor('image'))
-async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
-  try {
-    // SSE 헤더 설정
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+  @Post('analyze')
+  @UseInterceptors(FileInterceptor('image'))
+  async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
+    try {
+      // SSE 헤더 설정
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-    // Vision API 호출
-    const visionResult = await this.visionService.detectTextInImage(file.buffer);
-    
-    // 문장 인식 결과 전송
-    res.write(`data: ${JSON.stringify({
-      type: 'sentences',
-      data: { sentences: visionResult.sentences }
-    })}\n\n`);
+      // Vision API 호출
+      const visionResult = await this.visionService.detectTextInImage(file.buffer);
 
-    // 문법 분석
-    const grammarResult = await this.grammarService.findMostNaturalSentence(visionResult.sentences);
+      // 문장 인식 결과 전송
+      res.write(`data: ${JSON.stringify({
+        type: 'sentences',
+        data: { sentences: visionResult.sentences }
+      })}\n\n`);
 
-    // 최종 결과 전송
-    res.write(`data: ${JSON.stringify({
-      type: 'result',
-      data: grammarResult
-    })}\n\n`);
+      // 문법 분석
+      const grammarResult = await this.grammarService.findMostNaturalSentence(visionResult.sentences);
 
-    return res.end();
-  } catch (error) {
-    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Analysis failed' })}\n\n`);
-    return res.end();
+      // 최종 결과 전송
+      res.write(`data: ${JSON.stringify({
+        type: 'result',
+        data: grammarResult
+      })}\n\n`);
+
+      return res.end();
+    } catch (error) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Analysis failed' })}\n\n`);
+      return res.end();
+    }
   }
 }
