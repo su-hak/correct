@@ -18,7 +18,7 @@ export class VisionService {
     private optimizedHttpService: OptimizedHttpService,
   ) {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
-    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com');
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com/v1');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
@@ -46,7 +46,7 @@ export class VisionService {
       // 3. Vision API 호출
       const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const response = await this.httpClient.post(
-        `/v1/images:annotate?key=${this.apiKey}`,
+        `/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {
