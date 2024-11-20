@@ -1,20 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import * as sharp from 'sharp';
 import { GrammarService } from '../grammar/grammar.service';
 import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
+import { OptimizedHttpService } from 'src/shared/optimized-http.service';
 
 @Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly apiKey: string;
+  private readonly httpClient: AxiosInstance;
 
   constructor(
     private configService: ConfigService,
-    private grammarService: GrammarService
+    private grammarService: GrammarService,
+    private optimizedHttpService: OptimizedHttpService,
   ) {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
@@ -41,8 +45,8 @@ export class VisionService {
       }
       // 3. Vision API 호출
       const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
-      const response = await axios.post(
-        `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
+      const response = await this.httpClient.post(
+        `/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {

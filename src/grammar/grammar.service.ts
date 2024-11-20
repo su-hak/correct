@@ -1,17 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
+import { OptimizedHttpService } from 'src/shared/optimized-http.service';
 
 @Injectable()
 export class GrammarService {
   private readonly logger = new Logger(GrammarService.name);
   private readonly openaiApiKey: string;
+  private readonly httpClient: AxiosInstance;
 
   constructor(
     private configService: ConfigService,
+    private optimizedHttpService: OptimizedHttpService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://api.openai.com/v1');
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{
@@ -26,8 +30,8 @@ export class GrammarService {
       this.logger.debug('Input sentences:', sentences);
       }
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
+      const response = await this.httpClient.post(
+        '/chat/completions',
         {
           model: "gpt-4o-mini-2024-07-18",
           messages: [

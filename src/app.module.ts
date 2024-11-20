@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { BullModule } from '@nestjs/bull';
 import { ImageProcessingModule } from './image-processing/image-processing.module';
 import { CacheModule } from '@nestjs/cache-manager';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CacheModule } from '@nestjs/cache-manager';
       },
       inject: [ConfigService],
     }),
+    SharedModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
