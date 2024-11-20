@@ -25,7 +25,7 @@ export class VisionService {
       const binaryBuffer = await sharp(imageBuffer)
         .resize(800, null, { 
           withoutEnlargement: true,
-          kernel: sharp.kernel.nearest
+          kernel: sharp.kernel.lanczos3
         })
         .jpeg({ quality: 80 })
         .toBuffer();
@@ -42,7 +42,7 @@ export class VisionService {
       // 3. Vision API 호출
       const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const response = await axios.post(
-        `https://asia-southeast1-vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
+        `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         {
           requests: [{
             image: {
