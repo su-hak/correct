@@ -4,30 +4,23 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as dns from 'dns';
 import * as https from 'https';
 import * as http from 'http';
+import * as http2 from 'http2';
+
+const client = http2.connect('https://vision.googleapis.com');
 
 @Injectable()
 export class OptimizedHttpService {
     private dnsCache = new Map();
 
     async requestWithRetry(config: AxiosRequestConfig): Promise<any> {
-        const instances = Array(3).fill(null).map(() => 
-            axios.create({
-                timeout: 10000,
-                httpsAgent: new https.Agent({
-                    keepAlive: true,
-                    maxSockets: 50,
-                    rejectUnauthorized: false,
-                    noDelay: true
-                })
-            })
-        );
-        
-        const responses = await Promise.race(
-            instances.map(instance => instance(config))
-        );
-        
-        return responses;
-     }
+        const startTime = Date.now();
+        const response = await axios({
+            ...config,
+            onUploadProgress: (e) => console.log(`Upload speed: ${e.loaded / (Date.now() - startTime)} KB/s`),
+            onDownloadProgress: (e) => console.log(`Download speed: ${e.loaded / (Date.now() - startTime)} KB/s`)
+        });
+        return response;
+    }
 
     createAxiosInstance(baseURL: string): AxiosInstance {
         const agent = new https.Agent({
