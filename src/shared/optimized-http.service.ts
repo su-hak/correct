@@ -9,12 +9,25 @@ import * as http from 'http';
 export class OptimizedHttpService {
     private dnsCache = new Map();
 
-    async requestWithRetry(config: AxiosRequestConfig, maxAttempts = 3): Promise<any> {
+    async requestWithRetry(config: AxiosRequestConfig): Promise<any> {
         const instances = Array(3).fill(null).map(() => 
-            this.createAxiosInstance(config.baseURL || '')
+            axios.create({
+                timeout: 10000,
+                httpsAgent: new https.Agent({
+                    keepAlive: true,
+                    maxSockets: 50,
+                    rejectUnauthorized: false,
+                    noDelay: true
+                })
+            })
         );
-        return Promise.race(instances.map(instance => instance(config)));
-    }
+        
+        const responses = await Promise.race(
+            instances.map(instance => instance(config))
+        );
+        
+        return responses;
+     }
 
     createAxiosInstance(baseURL: string): AxiosInstance {
         const agent = new https.Agent({
