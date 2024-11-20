@@ -8,6 +8,7 @@ import { GrammarModule } from 'src/grammar/grammar.module';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
+import { SharedModule } from 'src/shared/shared.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     HttpModule,
     ConfigModule,
     CacheModule.register(),
+    SharedModule,
   ],
   controllers: [ImageProcessingController],
   providers: [VisionService, GrammarService],
