@@ -43,7 +43,12 @@ export class ImageProcessingController {
       // 최종 결과 전송
       res.write(`data: ${JSON.stringify({
         type: 'result',
-        data: grammarResult
+        data: {
+          sentences: visionResult.sentences,
+          correctIndex: grammarResult.correctIndex,
+          correctSentence: grammarResult.correctSentence,
+          sentenceScores: grammarResult.sentenceScores
+        }
       })}\n\n`);
 
       return res.end();
