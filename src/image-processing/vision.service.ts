@@ -18,7 +18,7 @@ export class VisionService {
     private optimizedHttpService: OptimizedHttpService,
   ) {
     this.apiKey = this.configService.get<string>('GOOGLE_CLOUD_API_KEY');
-    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com/v1');
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://vision.googleapis.com');
   }
 
   async detectTextInImage(imageBuffer: Buffer): Promise<any> {
