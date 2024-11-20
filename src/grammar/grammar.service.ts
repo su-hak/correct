@@ -16,11 +16,6 @@ export class GrammarService {
     private optimizedHttpService: OptimizedHttpService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://api.openai.com/v1', {
-      httpsAgent: new https.Agent({  
-        rejectUnauthorized: false
-      })
-    });
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{
@@ -35,9 +30,10 @@ export class GrammarService {
       this.logger.debug('Input sentences:', sentences);
       }
 
-      const response = await this.httpClient.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
+      const response = await this.optimizedHttpService.requestWithRetry({
+        method: 'post',
+        url: 'https://api.openai.com/v1/chat/completions',
+        data: {
           model: "gpt-4o-mini-2024-07-18",
           messages: [
             {
@@ -55,7 +51,6 @@ export class GrammarService {
           presence_penalty: 0,
           frequency_penalty: 0,
         },
-        {
           headers: {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'

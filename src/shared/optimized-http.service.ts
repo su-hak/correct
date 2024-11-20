@@ -3,54 +3,64 @@ import { Injectable } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as dns from 'dns';
 import * as https from 'https';
-import * as zlib from 'zlib';
+import * as http from 'http';
 
 @Injectable()
 export class OptimizedHttpService {
- private dnsCache = new Map();
+    private dnsCache = new Map();
 
- createAxiosInstance(baseURL: string, config?: AxiosRequestConfig): AxiosInstance {
-   const agent = new https.Agent({
-     keepAlive: true,
-     keepAliveMsecs: 10000,
-     maxSockets: 100,
-     rejectUnauthorized: false
-   });
+    async requestWithRetry(config: AxiosRequestConfig, maxAttempts = 3): Promise<any> {
+        const instances = Array(3).fill(null).map(() => 
+            this.createAxiosInstance(config.baseURL || '')
+        );
+        return Promise.race(instances.map(instance => instance(config)));
+    }
 
-   const instance = axios.create({
-     baseURL,
-     timeout: 10000,
-     httpsAgent: agent,
-     ...config,
-     headers: {
-       'Connection': 'keep-alive',
-       'Accept-Encoding': 'gzip,deflate'
-     },
-     decompress: true,
-     maxContentLength: 10 * 1024 * 1024 // 10MB
-   });
+    createAxiosInstance(baseURL: string): AxiosInstance {
+        const agent = new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+            maxSockets: 50,
+            rejectUnauthorized: false,
+            scheduling: 'lifo',
+            noDelay: true
+        });
 
-   // DNS 캐싱
-   instance.interceptors.request.use(async (config) => {
-     const url = new URL(config.url);
-     if (!this.dnsCache.has(url.hostname)) {
-       const addresses = await dns.promises.resolve(url.hostname);
-       this.dnsCache.set(url.hostname, addresses[0]);
-     }
-     return config;
-   });
+        const instance = axios.create({
+            baseURL,
+            timeout: 10000,
+            maxContentLength: 10 * 1024 * 1024,
+            socketPath: null,
+            httpAgent: new http.Agent({
+                keepAlive: true,
+                maxSockets: 50,
+                maxFreeSockets: 10,
+                timeout: 60000,
+                scheduling: 'fifo'
+            }),
+            maxRedirects: 0,
+            responseType: 'arraybuffer',
+            headers: {
+                'Connection': 'keep-alive',
+                'Accept-Encoding': 'gzip,deflate'
+            },
+            transitional: {
+                silentJSONParsing: true,
+                forcedJSONParsing: true,
+                clarifyTimeoutError: false
+            }
+        });
 
-   // 응답 압축
-   instance.interceptors.response.use((response) => {
-     const contentEncoding = response.headers['content-encoding'];
-     if (contentEncoding === 'gzip') {
-       response.data = zlib.gunzipSync(response.data);
-     } else if (contentEncoding === 'deflate') {
-       response.data = zlib.inflateSync(response.data);
-     }
-     return response;
-   });
+        // DNS 캐싱 인터셉터 추가
+        instance.interceptors.request.use(async (config) => {
+            const url = new URL(config.url);
+            if (!this.dnsCache.has(url.hostname)) {
+                const addresses = await dns.promises.resolve(url.hostname);
+                this.dnsCache.set(url.hostname, addresses[0]);
+            }
+            return config;
+        });
 
-   return instance;
- }
+        return instance;
+    }
 }
