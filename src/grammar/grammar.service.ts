@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { ENABLE_ERROR_LOGS, ENABLE_PERFORMANCE_LOGS } from 'src/constants/Logger.constants';
 import { OptimizedHttpService } from 'src/shared/optimized-http.service';
+import * as https from 'https';
 
 @Injectable()
 export class GrammarService {
@@ -15,7 +16,11 @@ export class GrammarService {
     private optimizedHttpService: OptimizedHttpService,
   ) {
     this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
-    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://api.openai.com/v1');
+    this.httpClient = this.optimizedHttpService.createAxiosInstance('https://api.openai.com/v1', {
+      httpsAgent: new https.Agent({  
+        rejectUnauthorized: false
+      })
+    });
   }
 
   async findMostNaturalSentence(sentences: string[]): Promise<{
@@ -31,7 +36,7 @@ export class GrammarService {
       }
 
       const response = await this.httpClient.post(
-        '/chat/completions',
+        'https://api.openai.com/v1/chat/completions',
         {
           model: "gpt-4o-mini-2024-07-18",
           messages: [
