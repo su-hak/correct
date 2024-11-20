@@ -18,72 +18,38 @@ export class ImageProcessingController {
     private readonly grammarService: GrammarService,
   ) { }
 
+  // image-processing.controller.ts
   @Post('analyze')
   @UseInterceptors(FileInterceptor('image'))
-  async analyzeImage(
-    @UploadedFile() file: Express.Multer.File,
-    @Res() res: Response
-  ) {
+  async analyzeImage(@UploadedFile() file: Express.Multer.File, @Res() res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
     try {
-      // SSE 헤더 설정
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      // 초기 상태 전송
-      res.write(`data: ${JSON.stringify({
-        status: 'processing',
-        message: '이미지 처리 시작...'
-      })}\n\n`);
-
-      // Vision API 호출
-      const visionResult = await this.visionService.detectTextInImage(file.buffer);
-
-      // 문장 인식 실패 시
-      if (!visionResult.sentences || visionResult.sentences.length === 0) {
-        this.logger.warn('No valid sentences found');
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: 'No text detected'
-        })}\n\n`);
+      const imageResult = await this.visionService.detectTextInImage(file.buffer);
+      
+      if (!imageResult.sentences.length) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'No text detected' })}\n\n`);
         return res.end();
       }
-
-      // 문장 인식 결과 전송
+  
       res.write(`data: ${JSON.stringify({
         type: 'sentences',
-        data: {
-          sentences: visionResult.sentences
-        }
+        data: { sentences: imageResult.sentences }
       })}\n\n`);
-
-      // 문법 분석
-      const grammarResult = await this.grammarService.findMostNaturalSentence(
-        visionResult.sentences
-      );
-
-      // 최종 결과 전송
+  
+      const grammarResult = await this.grammarService.findMostNaturalSentence(imageResult.sentences);
+      
       res.write(`data: ${JSON.stringify({
         type: 'result',
-        data: {
-          sentences: visionResult.sentences,
-          correctIndex: grammarResult.correctIndex,
-          correctSentence: grammarResult.correctSentence,
-          sentenceScores: grammarResult.sentenceScores
-        }
+        data: grammarResult
       })}\n\n`);
-
-      return res.end();
-
+  
+      res.end();
     } catch (error) {
-      if (ENABLE_PERFORMANCE_LOGS) {
-      this.logger.error('Analysis error:', error);
-      }
-      res.write(`data: ${JSON.stringify({
-        type: 'error',
-        message: error.message || 'Analysis failed'
-      })}\n\n`);
-      return res.end();
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Analysis failed' })}\n\n`);
+      res.end();
     }
   }
 }
