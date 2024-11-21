@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosHeaders } from 'axios';
 import * as https from 'https';
 
 @Injectable()
@@ -11,19 +11,27 @@ export class OptimizedHttpService {
            const instance = axios.create({
                httpsAgent: new https.Agent({
                    keepAlive: true,
-                   maxSockets: 50,
-                   timeout: 30000,
-                   scheduling: 'lifo'
+                   maxSockets: 100,
+                   keepAliveMsecs: 60000,
+                   timeout: 5000,
+                   scheduling: 'fifo'
                }),
-               timeout: 30000,
+               timeout: 5000,
+               maxRedirects: 0,
                decompress: true,
-               maxContentLength: 10 * 1024 * 1024,
-               headers: {
-                   'Accept-Encoding': 'gzip',
-                   'Connection': 'keep-alive'
-               },
-               validateStatus: (status) => status < 500
+               maxContentLength: 5 * 1024 * 1024,
+               validateStatus: status => status >= 200 && status < 500
            });
+
+           // 성능 최적화 인터셉터
+           instance.interceptors.request.use(config => {
+               const headers = new AxiosHeaders(config.headers);
+               headers.set('Connection', 'keep-alive');
+               headers.set('Accept-Encoding', 'gzip');
+               config.headers = headers;
+               return config;
+           });
+
            this.axiosInstances.set(hostname, instance);
        }
        return this.axiosInstances.get(hostname);
@@ -35,26 +43,14 @@ export class OptimizedHttpService {
        const instance = this.getAxiosInstance(url.hostname);
 
        try {
-           const response = await instance({
-               ...config,
-               headers: {
-                   ...config.headers
-               }
-           });
-
+           const response = await instance(config);
            console.log('Network metrics:', {
                time: Date.now() - startTime,
                host: url.hostname
            });
-
            return response;
-           
        } catch (error) {
-           console.error('Request failed:', {
-               url: url.hostname,
-               error: error.message,
-               duration: Date.now() - startTime
-           });
+           console.error('Request failed:', error.message);
            throw error;
        }
    }
