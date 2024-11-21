@@ -16,19 +16,18 @@ export class OptimizedHttpService {
                     keepAlive: true,
                     keepAliveMsecs: 1000,
                     maxSockets: 10,
-                    maxFreeSockets: 10,
-                    timeout: 10000,
-                    scheduling: 'fifo'
+                    timeout: 10000
                 }),
-                maxRedirects: 5,
                 timeout: 10000,
-                decompress: true,
-                maxContentLength: 1024 * 1024, // 1MB
-                maxBodyLength: 1024 * 1024,    // 1MB
-                headers: {
-                    'Accept-Encoding': 'gzip',
-                    'Connection': 'keep-alive'
-                }
+                validateStatus: status => status < 500,  // 4xx 에러도 처리
+                maxContentLength: 5 * 1024 * 1024,      // 5MB
+                transformResponse: [(data) => {
+                    try {
+                        return typeof data === 'string' ? JSON.parse(data) : data;
+                    } catch {
+                        return data;
+                    }
+                }]
             });
             this.axiosInstances.set(hostname, instance);
         }
@@ -45,32 +44,24 @@ export class OptimizedHttpService {
                 ...config,
                 headers: {
                     ...config.headers,
-                    'Content-Length': config.data ? Buffer.byteLength(JSON.stringify(config.data)) : 0
-                },
-                transformResponse: [
-                    (data) => {
-                        try {
-                            return JSON.parse(data);
-                        } catch {
-                            return data;
-                        }
-                    }
-                ],
-                responseType: 'json'
+                    'Accept-Encoding': 'gzip',
+                    'Connection': 'keep-alive'
+                }
             });
 
-            const endTime = Date.now();
+            if (!response.data && response.status !== 204) {
+                throw new Error('Empty response received');
+            }
+
             console.log('Network metrics:', {
-                time: endTime - startTime,
+                time: Date.now() - startTime,
                 host: url.hostname
             });
 
             return response;
         } catch (error) {
-            if (error.code === 'ECONNABORTED') {
-                throw new Error('Request timeout');
-            }
-            throw error;
+            const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+            throw new Error(isTimeout ? 'Request timeout' : error.message);
         }
     }
 }
