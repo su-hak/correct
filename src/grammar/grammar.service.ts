@@ -30,7 +30,7 @@ export class GrammarService {
       this.logger.debug('Input sentences:', sentences);
       }
 
-      const response = await this.optimizedHttpService.request({
+      const response = await this.optimizedHttpService.requestWithRetry({
         method: 'post',
         url: 'https://api.openai.com/v1/chat/completions',
         data: {

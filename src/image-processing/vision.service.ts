@@ -45,7 +45,7 @@ export class VisionService {
       }
       // 3. Vision API 호출
       const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
-      const response = await this.optimizedHttpService.request({
+      const response = await this.optimizedHttpService.requestWithRetry({
         method: 'post',
         url: `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         data: {
