@@ -27,11 +27,11 @@ export class VisionService {
       // 1. 이미지 최적화 및 바이너리로 변환
       const optimizeStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const binaryBuffer = await sharp(imageBuffer)
-        .resize(1200, null, {
+        .resize(800, null, {
           withoutEnlargement: true,
           kernel: sharp.kernel.lanczos3
         })
-        .jpeg({ quality: 85 })
+        .jpeg({ quality: 80 })
         .toBuffer();
       if (ENABLE_PERFORMANCE_LOGS) {
         this.logger.log(`Image optimization took: ${Date.now() - optimizeStart}ms`);
