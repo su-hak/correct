@@ -55,7 +55,7 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 30000,
+          timeout: 5000,
         }
       );
       if (ENABLE_PERFORMANCE_LOGS) {
