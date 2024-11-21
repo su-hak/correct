@@ -9,24 +9,28 @@ export class OptimizedHttpService {
     private dnsCache = new Map();
     private axiosInstances = new Map<string, AxiosInstance>();
 
+    private createKeepAliveAgent(maxSockets: number = 50) {
+        return new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+            maxSockets,
+            timeout: 30000,
+            scheduling: 'lifo',  // fifo -> lifo로 변경해서 더 빠른 응답 
+            noDelay: true,
+            rejectUnauthorized: true,
+        });
+    }
+    
     private getAxiosInstance(hostname: string): AxiosInstance {
         if (!this.axiosInstances.has(hostname)) {
             const instance = axios.create({
-                httpsAgent: new https.Agent({
-                    keepAlive: true,
-                    keepAliveMsecs: 1000,
-                    maxSockets: 50,
-                    timeout: 30000,
-                    scheduling: 'fifo',
-                    noDelay: true,
-                    rejectUnauthorized: true
-                }),
+                httpsAgent: this.createKeepAliveAgent(),
                 timeout: 30000,
                 decompress: true,
                 maxContentLength: 50 * 1024 * 1024,
                 maxBodyLength: 50 * 1024 * 1024,
                 headers: {
-                    'Accept-Encoding': 'gzip, deflate',
+                    'Accept-Encoding': 'gzip',  // 단순화
                     'Connection': 'keep-alive'
                 }
             });
