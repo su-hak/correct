@@ -61,24 +61,21 @@ export class OptimizedHttpService {
         
         const optimizedConfig: AxiosRequestConfig = {
             ...config,
-            responseType: 'stream',
             headers: {
                 ...config.headers,
                 'Host': url.hostname,
             },
             onUploadProgress: (progressEvent) => {
-                if (progressEvent.total) {  // total이 있을 때만 계산
+                if (progressEvent.total) {
                     uploadSize = progressEvent.loaded;
-                    const duration = (Date.now() - startTime) / 1000;
-                    const speed = (uploadSize * 1000) / (1024 * duration);
+                    const speed = (uploadSize * 1000) / ((Date.now() - startTime) * 1024);
                     console.log(`Upload speed: ${speed.toFixed(1)} KB/s`);
                 }
             },
             onDownloadProgress: (progressEvent) => {
-                if (progressEvent.total) {  // total이 있을 때만 계산
+                if (progressEvent.total) {
                     downloadSize = progressEvent.loaded;
-                    const duration = (Date.now() - startTime) / 1000;
-                    const speed = (downloadSize * 1000) / (1024 * duration);
+                    const speed = (downloadSize * 1000) / ((Date.now() - startTime) * 1024);
                     console.log(`Download speed: ${speed.toFixed(1)} KB/s`);
                 }
             }
