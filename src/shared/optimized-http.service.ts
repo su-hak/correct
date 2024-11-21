@@ -14,18 +14,18 @@ export class OptimizedHttpService {
             const instance = axios.create({
                 httpsAgent: new https.Agent({
                     keepAlive: true,
-                    keepAliveMsecs: 1000,
                     maxSockets: 10,
                     timeout: 10000
                 }),
                 timeout: 10000,
-                validateStatus: status => status < 500,  // 4xx 에러도 처리
-                maxContentLength: 5 * 1024 * 1024,      // 5MB
+                validateStatus: (status) => true,  // 모든 상태 코드 허용
+                maxContentLength: 5 * 1024 * 1024,
                 transformResponse: [(data) => {
+                    if (!data) return { success: false };
                     try {
                         return typeof data === 'string' ? JSON.parse(data) : data;
                     } catch {
-                        return data;
+                        return { success: false, data };
                     }
                 }]
             });
@@ -44,24 +44,26 @@ export class OptimizedHttpService {
                 ...config,
                 headers: {
                     ...config.headers,
-                    'Accept-Encoding': 'gzip',
-                    'Connection': 'keep-alive'
+                    'Accept-Encoding': 'gzip'
                 }
             });
-
-            if (!response.data && response.status !== 204) {
-                throw new Error('Empty response received');
-            }
 
             console.log('Network metrics:', {
                 time: Date.now() - startTime,
                 host: url.hostname
             });
 
-            return response;
+            return {
+                ...response,
+                success: true,
+                data: response.data || { message: 'No data' }
+            };
         } catch (error) {
-            const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
-            throw new Error(isTimeout ? 'Request timeout' : error.message);
+            return {
+                success: false,
+                error: error.message,
+                data: null
+            };
         }
     }
 }
