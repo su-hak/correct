@@ -19,15 +19,14 @@ export class OptimizedHttpService {
                     timeout: 30000,
                     scheduling: 'fifo',
                     noDelay: true,
-                    rejectUnauthorized: true,
-                    ALPNProtocols: ['h2', 'http/1.1']
+                    rejectUnauthorized: true
                 }),
                 timeout: 30000,
                 decompress: true,
                 maxContentLength: 50 * 1024 * 1024,
                 maxBodyLength: 50 * 1024 * 1024,
                 headers: {
-                    'Accept-Encoding': 'br, gzip, deflate',
+                    'Accept-Encoding': 'gzip, deflate',
                     'Connection': 'keep-alive'
                 }
             });
