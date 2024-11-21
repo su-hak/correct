@@ -27,11 +27,11 @@ export class VisionService {
       // 1. 이미지 최적화 및 바이너리로 변환
       const optimizeStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
       const binaryBuffer = await sharp(imageBuffer)
-        .resize(800, null, {
+        .resize(1200, null, {
           withoutEnlargement: true,
           kernel: sharp.kernel.lanczos3
         })
-        .jpeg({ quality: 80 })
+        .jpeg({ quality: 85 })
         .toBuffer();
       if (ENABLE_PERFORMANCE_LOGS) {
         this.logger.log(`Image optimization took: ${Date.now() - optimizeStart}ms`);
@@ -45,7 +45,7 @@ export class VisionService {
       }
       // 3. Vision API 호출
       const apiStart = ENABLE_PERFORMANCE_LOGS ? Date.now() : 0;
-      const response = await this.optimizedHttpService.requestWithRetry({
+      const response = await this.optimizedHttpService.request({
         method: 'post',
         url: `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
         data: {
@@ -66,7 +66,7 @@ export class VisionService {
             'Content-Type': 'application/json',
             'Accept-Encoding': 'gzip'
           },
-          timeout: 5000
+          timeout: 30000,
         }
       );
       if (ENABLE_PERFORMANCE_LOGS) {

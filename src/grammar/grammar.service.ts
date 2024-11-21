@@ -30,7 +30,7 @@ export class GrammarService {
       this.logger.debug('Input sentences:', sentences);
       }
 
-      const response = await this.optimizedHttpService.requestWithRetry({
+      const response = await this.optimizedHttpService.request({
         method: 'post',
         url: 'https://api.openai.com/v1/chat/completions',
         data: {
@@ -55,7 +55,7 @@ export class GrammarService {
             'Authorization': `Bearer ${this.openaiApiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 5000
+          timeout: 30000,
         }
       );
       if (ENABLE_PERFORMANCE_LOGS) {

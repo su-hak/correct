@@ -1,63 +1,53 @@
 import { Injectable } from '@nestjs/common';
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosHeaders } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as dns from 'dns';
 import * as https from 'https';
-import * as http from 'http';
-import * as http2 from 'http2';
 import { OutgoingHttpHeaders } from 'http2';
 
 @Injectable()
 export class OptimizedHttpService {
     private dnsCache = new Map();
-    private http2Clients = new Map();
+    private axiosInstances = new Map<string, AxiosInstance>();
     
-    private keepAliveAgent = new https.Agent({
-        keepAlive: true,
-        keepAliveMsecs: 1000,
-        maxSockets: 50,
-        timeout: 60000,
-        scheduling: 'lifo',
-        noDelay: true,
-        rejectUnauthorized: true, // 프로덕션 환경 설정
-        secureProtocol: 'TLSv1_2_method'
-    });
-
-    constructor() {
-        process.on('exit', () => {
-            for (const client of this.http2Clients.values()) {
-                client.close();
-            }
+    private createKeepAliveAgent(maxSockets: number = 50) {
+        return new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+            maxSockets,
+            timeout: 30000,
+            scheduling: 'fifo',
+            noDelay: true,
+            rejectUnauthorized: true,
         });
     }
 
-    private async getHttp2Client(hostname: string): Promise<http2.ClientHttp2Session> {
-        if (!this.http2Clients.has(hostname)) {
-            const client = await http2.connect(`https://${hostname}`, {
-                settings: {
-                    enablePush: false,
-                    initialWindowSize: 1024 * 1024,
-                    maxConcurrentStreams: 100
+    private getAxiosInstance(hostname: string): AxiosInstance {
+        if (!this.axiosInstances.has(hostname)) {
+            const instance = axios.create({
+                httpsAgent: this.createKeepAliveAgent(),
+                timeout: 30000,
+                decompress: true,
+                maxContentLength: 50 * 1024 * 1024, // 50MB
+                maxBodyLength: 50 * 1024 * 1024,    // 50MB
+                headers: {
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive'
                 }
             });
-
-            client.on('error', (err) => {
-                console.error(`HTTP/2 client error for ${hostname}:`, err);
-                this.http2Clients.delete(hostname);
-            });
-
-            client.on('goaway', () => {
-                this.http2Clients.delete(hostname);
-            });
-
-            this.http2Clients.set(hostname, client);
+            this.axiosInstances.set(hostname, instance);
         }
-        return this.http2Clients.get(hostname);
+        return this.axiosInstances.get(hostname);
     }
 
-    async requestWithRetry(config: AxiosRequestConfig, retries = 3): Promise<any> {
+    async request(config: AxiosRequestConfig): Promise<any> {
         const startTime = Date.now();
         const url = new URL(config.url);
+        let uploadSize = 0;
+        let downloadSize = 0;
+        let lastProgressTime = Date.now();
+        const progressInterval = 1000; // 1초마다 속도 업데이트
 
+        // DNS 캐싱
         if (!this.dnsCache.has(url.hostname)) {
             try {
                 const addresses = await dns.promises.resolve4(url.hostname);
@@ -67,87 +57,64 @@ export class OptimizedHttpService {
             }
         }
 
+        const instance = this.getAxiosInstance(url.hostname);
+        
         const optimizedConfig: AxiosRequestConfig = {
             ...config,
-            httpsAgent: this.keepAliveAgent,
             headers: {
                 ...config.headers,
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Host': url.hostname
+                'Host': url.hostname,
             },
-            decompress: true,
-            maxContentLength: 10 * 1024 * 1024,
-            maxBodyLength: 10 * 1024 * 1024,
-            timeout: 30000,
-            validateStatus: (status) => status < 500,
-            onUploadProgress: (e) => {
-                if (e.total) {
-                    const speed = (e.loaded / (Date.now() - startTime)) * 1000;
-                    console.log(`Upload speed: ${(speed / 1024).toFixed(1)} KB/s`);
+            onUploadProgress: (progressEvent) => {
+                const currentTime = Date.now();
+                if (currentTime - lastProgressTime >= progressInterval) {
+                    uploadSize = progressEvent.loaded;
+                    const duration = (currentTime - startTime) / 1000; // 초 단위
+                    const speed = (uploadSize / 1024) / duration; // KB/s
+                    console.log(`Upload speed: ${speed.toFixed(1)} KB/s`);
+                    lastProgressTime = currentTime;
                 }
             },
-            onDownloadProgress: (e) => {
-                if (e.total) {
-                    const speed = (e.loaded / (Date.now() - startTime)) * 1000;
-                    console.log(`Download speed: ${(speed / 1024).toFixed(1)} KB/s`);
+            onDownloadProgress: (progressEvent) => {
+                const currentTime = Date.now();
+                if (currentTime - lastProgressTime >= progressInterval) {
+                    downloadSize = progressEvent.loaded;
+                    const duration = (currentTime - startTime) / 1000; // 초 단위
+                    const speed = (downloadSize / 1024) / duration; // KB/s
+                    console.log(`Download speed: ${speed.toFixed(1)} KB/s`);
+                    lastProgressTime = currentTime;
                 }
             }
         };
 
-        for (let attempt = 0; attempt < retries; attempt++) {
-            try {
-                const response = await axios(optimizedConfig);
-                
-                console.log('Network metrics:', {
-                    time: Date.now() - startTime,
-                    host: url.hostname,
-                    cached: this.dnsCache.has(url.hostname),
-                    attempt: attempt + 1,
-                    status: response.status
-                });
+        try {
+            const response = await instance(optimizedConfig);
+            
+            const endTime = Date.now();
+            const duration = (endTime - startTime) / 1000; // 초 단위
+            
+            // 최종 속도 계산
+            const finalUploadSpeed = (uploadSize / 1024) / duration;
+            const finalDownloadSpeed = (downloadSize / 1024) / duration;
+            
+            console.log('Network metrics:', {
+                time: endTime - startTime,
+                host: url.hostname,
+                cached: this.dnsCache.has(url.hostname),
+                status: response.status,
+                uploadSpeed: `${finalUploadSpeed.toFixed(1)} KB/s`,
+                downloadSpeed: `${finalDownloadSpeed.toFixed(1)} KB/s`,
+                totalSize: `${(downloadSize / 1024).toFixed(1)} KB`
+            });
 
-                return response;
-            } catch (error) {
-                if (attempt === retries - 1) throw error;
-
-                console.error(`Request failed (attempt ${attempt + 1}/${retries}):`, error.message);
-                await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-            }
+            return response;
+        } catch (error) {
+            console.error('Request failed:', {
+                url: url.hostname,
+                error: error.message,
+                duration: Date.now() - startTime
+            });
+            throw error;
         }
-    }
-
-    async http2Request(config: AxiosRequestConfig): Promise<any> {
-        const url = new URL(config.url);
-        const client = await this.getHttp2Client(url.hostname);
-
-        return new Promise((resolve, reject) => {
-            // HTTP/2 헤더 타입 처리
-            const headers: OutgoingHttpHeaders = {
-                ':method': config.method?.toUpperCase() || 'GET',
-                ':path': url.pathname + url.search
-            };
-
-            // 추가 헤더가 있다면 HTTP/2 호환 형식으로 변환
-            if (config.headers) {
-                Object.entries(config.headers).forEach(([key, value]) => {
-                    if (value !== undefined) {
-                        headers[key.toLowerCase()] = value;
-                    }
-                });
-            }
-
-            const stream = client.request(headers);
-
-            let data = '';
-            stream.on('data', (chunk) => data += chunk);
-            stream.on('end', () => resolve(data));
-            stream.on('error', reject);
-
-            if (config.data) {
-                stream.write(config.data);
-            }
-            stream.end();
-        });
     }
 }
