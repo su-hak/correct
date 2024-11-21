@@ -8,29 +8,26 @@ import { OutgoingHttpHeaders } from 'http2';
 export class OptimizedHttpService {
     private dnsCache = new Map();
     private axiosInstances = new Map<string, AxiosInstance>();
-    
-    private createKeepAliveAgent(maxSockets: number = 50) {
-        return new https.Agent({
-            keepAlive: true,
-            keepAliveMsecs: 1000,
-            maxSockets,
-            timeout: 30000,
-            scheduling: 'fifo',
-            noDelay: true,
-            rejectUnauthorized: true,
-        });
-    }
 
     private getAxiosInstance(hostname: string): AxiosInstance {
         if (!this.axiosInstances.has(hostname)) {
             const instance = axios.create({
-                httpsAgent: this.createKeepAliveAgent(),
+                httpsAgent: new https.Agent({
+                    keepAlive: true,
+                    keepAliveMsecs: 1000,
+                    maxSockets: 50,
+                    timeout: 30000,
+                    scheduling: 'fifo',
+                    noDelay: true,
+                    rejectUnauthorized: true,
+                    ALPNProtocols: ['h2', 'http/1.1']
+                }),
                 timeout: 30000,
                 decompress: true,
-                maxContentLength: 50 * 1024 * 1024, // 50MB
-                maxBodyLength: 50 * 1024 * 1024,    // 50MB
+                maxContentLength: 50 * 1024 * 1024,
+                maxBodyLength: 50 * 1024 * 1024,
                 headers: {
-                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Accept-Encoding': 'br, gzip, deflate',
                     'Connection': 'keep-alive'
                 }
             });
