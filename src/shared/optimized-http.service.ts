@@ -1,55 +1,29 @@
 import { Injectable } from '@nestjs/common';
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosHeaders } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as https from 'https';
-import * as dns from 'dns';
-import { promisify } from 'util';
 
 @Injectable()
 export class OptimizedHttpService {
    private axiosInstances = new Map<string, AxiosInstance>();
-   private dnsLookup = promisify(dns.lookup);
 
-   private async getAxiosInstance(hostname: string): Promise<AxiosInstance> {
+   private getAxiosInstance(hostname: string): AxiosInstance {
        if (!this.axiosInstances.has(hostname)) {
            const instance = axios.create({
                httpsAgent: new https.Agent({
                    keepAlive: true,
                    maxSockets: 50,
-                   maxFreeSockets: 20,
-                   timeout: 8000,
-                   scheduling: 'lifo',
+                   timeout: 30000,
+                   scheduling: 'lifo'
                }),
-               timeout: 8000,
-               maxContentLength: 2 * 1024 * 1024,
-               decompress: false,
-               headers: new AxiosHeaders({
-                   'Keep-Alive': 'timeout=5, max=1000'
-               })
+               timeout: 30000,
+               decompress: true,
+               maxContentLength: 10 * 1024 * 1024,
+               headers: {
+                   'Accept-Encoding': 'gzip',
+                   'Connection': 'keep-alive'
+               },
+               validateStatus: (status) => status < 500
            });
-
-           instance.interceptors.request.use(async config => {
-               try {
-                   const { address } = await this.dnsLookup(hostname, { family: 4 });
-                   const headers = new AxiosHeaders(config.headers);
-                   headers.set('Host', hostname);
-                   config.headers = headers;
-                   config.url = config.url.replace(hostname, address);
-               } catch (error) {
-                   console.error('DNS lookup failed:', error);
-               }
-               return config;
-           });
-
-           instance.interceptors.response.use(
-               response => response,
-               async error => {
-                   if (error.code === 'ECONNABORTED') {
-                       return Promise.reject(new Error('Request timeout'));
-                   }
-                   return Promise.reject(error);
-               }
-           );
-
            this.axiosInstances.set(hostname, instance);
        }
        return this.axiosInstances.get(hostname);
@@ -58,16 +32,14 @@ export class OptimizedHttpService {
    async request(config: AxiosRequestConfig): Promise<any> {
        const startTime = Date.now();
        const url = new URL(config.url);
-       const instance = await this.getAxiosInstance(url.hostname);
+       const instance = this.getAxiosInstance(url.hostname);
 
        try {
-           const headers = new AxiosHeaders(config.headers);
-           headers.set('Accept-Encoding', 'gzip');
-           headers.set('Connection', 'keep-alive');
-
            const response = await instance({
                ...config,
-               headers
+               headers: {
+                   ...config.headers
+               }
            });
 
            console.log('Network metrics:', {
@@ -75,17 +47,15 @@ export class OptimizedHttpService {
                host: url.hostname
            });
 
-           return {
-               success: true,
-               data: response.data,
-               status: response.status
-           };
+           return response;
+           
        } catch (error) {
-           return {
-               success: false,
+           console.error('Request failed:', {
+               url: url.hostname,
                error: error.message,
-               status: error.response?.status
-           };
+               duration: Date.now() - startTime
+           });
+           throw error;
        }
    }
 }
