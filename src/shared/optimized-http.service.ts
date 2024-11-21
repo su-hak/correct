@@ -7,76 +7,55 @@ import * as http2 from 'http2';
 
 const client = http2.connect('https://vision.googleapis.com');
 
-// optimized-http.service.ts
 @Injectable()
 export class OptimizedHttpService {
     private dnsCache = new Map();
+    private keepAliveAgent = new https.Agent({
+        keepAlive: true,
+        keepAliveMsecs: 1000,
+        maxSockets: 50,
+        timeout: 60000,
+        scheduling: 'lifo',
+        noDelay: true,  // TCP_NODELAY 활성화
+    });
 
     async requestWithRetry(config: AxiosRequestConfig): Promise<any> {
-        const instances = Array(3).fill(null).map(() =>
-            axios.create({
-                timeout: 10000,
-                httpsAgent: new https.Agent({
-                    keepAlive: true,
-                    maxSockets: 50,
-                    rejectUnauthorized: false,
-                    noDelay: true
-                })
-            })
-        );
-
-        const responses = await Promise.race(
-            instances.map(instance => instance(config))
-        );
-
-        return responses;
-    }
-
-    createAxiosInstance(baseURL: string): AxiosInstance {
-        const agent = new https.Agent({
-            keepAlive: true,
-            keepAliveMsecs: 1000,
-            maxSockets: 50,
-            rejectUnauthorized: false,
-            scheduling: 'lifo',
-            noDelay: true
-        });
-
-        const instance = axios.create({
-            baseURL,
-            timeout: 10000,
-            maxContentLength: 10 * 1024 * 1024,
-            socketPath: null,
-            httpAgent: new http.Agent({
-                keepAlive: true,
-                maxSockets: 50,
-                maxFreeSockets: 10,
-                timeout: 60000,
-                scheduling: 'fifo'
-            }),
-            maxRedirects: 0,
-            responseType: 'arraybuffer',
+        const startTime = Date.now();
+        
+        // DNS 캐싱
+        const url = new URL(config.url);
+        if (!this.dnsCache.has(url.hostname)) {
+            const addresses = await dns.promises.resolve4(url.hostname);
+            this.dnsCache.set(url.hostname, addresses[0]);
+        }
+        
+        const optimizedConfig: AxiosRequestConfig = {
+            ...config,
+            httpsAgent: this.keepAliveAgent,
             headers: {
+                ...config.headers,
+                'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
-                'Accept-Encoding': 'gzip,deflate'
+                'Host': this.dnsCache.get(url.hostname)
             },
-            transitional: {
-                silentJSONParsing: true,
-                forcedJSONParsing: true,
-                clarifyTimeoutError: false
-            }
-        });
+            decompress: true,
+            maxContentLength: 10 * 1024 * 1024,
+            maxBodyLength: 10 * 1024 * 1024,
+            responseType: 'stream' as any,  // 응답 스트리밍
+            onUploadProgress: (e) => console.log(`Upload speed: ${e.loaded / (Date.now() - startTime)} KB/s`),
+            onDownloadProgress: (e) => console.log(`Download speed: ${e.loaded / (Date.now() - startTime)} KB/s`)
+        };
 
-        // DNS 캐싱 인터셉터 추가
-        instance.interceptors.request.use(async (config) => {
-            const url = new URL(config.url);
-            if (!this.dnsCache.has(url.hostname)) {
-                const addresses = await dns.promises.resolve(url.hostname);
-                this.dnsCache.set(url.hostname, addresses[0]);
-            }
-            return config;
-        });
-
-        return instance;
+        try {
+            const response = await axios(optimizedConfig);
+            return response;
+        } catch (error) {
+            console.error('Network metrics:', {
+                time: Date.now() - startTime,
+                host: url.hostname,
+                cached: this.dnsCache.has(url.hostname)
+            });
+            throw error;
+        }
     }
 }
